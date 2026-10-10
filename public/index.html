@@ -8,20 +8,27 @@
   <link rel="apple-touch-icon" href="logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="login" id="login" hidden>
-    <form class="login__card" id="loginForm">
-      <img class="login__logo" src="logo.svg" alt="Mantra" width="48" height="48" />
-      <h1>Mantra ERP</h1>
-      <p class="crumbs">Entre com seu e-mail da agência</p>
-      <label>E-mail<input id="loginEmail" name="email" type="email" autocomplete="username" required /></label>
-      <label>Senha<input name="senha" type="password" autocomplete="current-password" required /></label>
-      <p class="login__erro" id="loginErro" role="alert"></p>
-      <button class="btn-primary" type="submit">Entrar</button>
-    </form>
+    <div class="login__wrap">
+      <img class="login__brand" src="mantra-logo.png" alt="Mantra" width="150" height="31" />
+      <h1 class="login__title">MANTRA <span>ERP</span></h1>
+      <p class="login__tagline">Gestão da agência em um só lugar.</p>
+      <form class="login__card" id="loginForm" novalidate>
+        <h2 class="login__hello">HELLO!</h2>
+        <p class="login__sub">BOM TE VER POR AQUI.</p>
+        <label class="login__label" for="loginEmail">E-MAIL</label>
+        <input id="loginEmail" name="email" type="email" autocomplete="username" placeholder="seu.email@agenciamantra.com.br" required />
+        <div class="login__row"><label class="login__label" for="loginSenha">SENHA</label><button type="button" class="login__forgot" id="loginForgot">ESQUECEU A SENHA?</button></div>
+        <div class="login__pass"><input id="loginSenha" name="senha" type="password" autocomplete="current-password" required />
+          <button type="button" class="login__eye" id="loginEye" aria-label="Mostrar senha" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+        <p class="login__erro" id="loginErro" role="alert"></p>
+        <button class="login__btn" type="submit">ENTRAR</button>
+      </form>
+    </div>
   </div>
 
   <div class="app" hidden>

@@ -1128,8 +1128,19 @@ document.getElementById("senhaForm").addEventListener("submit", async (e) => {
 const loginEl = document.getElementById("login");
 function showLogin() { me = null; db = null; loginEl.hidden = false; appEl.hidden = true; document.getElementById("loginEmail").focus(); }
 async function entrar() { await loadData(); loginEl.hidden = true; appEl.hidden = false; renderView(); }
+document.getElementById("loginEye").addEventListener("click", (e) => {
+  const inp = document.getElementById("loginSenha"), btn = e.currentTarget;
+  const mostrar = inp.type === "password";
+  inp.type = mostrar ? "text" : "password";
+  btn.setAttribute("aria-pressed", mostrar); btn.setAttribute("aria-label", mostrar ? "Ocultar senha" : "Mostrar senha");
+});
+document.getElementById("loginForgot").addEventListener("click", () => {
+  document.getElementById("loginErro").textContent = "Peça a um administrador para redefinir sua senha em Aprovações e acessos → Usuários.";
+});
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const fdCheck = new FormData(e.target);
+  if (!fdCheck.get("email") || !fdCheck.get("senha")) { document.getElementById("loginErro").textContent = "Preencha e-mail e senha."; return; }
   const fd = new FormData(e.target);
   const err = document.getElementById("loginErro");
   err.textContent = "";

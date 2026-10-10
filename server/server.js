@@ -384,8 +384,8 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
 }
 
 /* ---------- HTTP ---------- */
-const STATIC = { "/": "index.html", "/index.html": "index.html", "/styles.css": "styles.css", "/app.js": "app.js", "/erp.js": "erp.js", "/logo.svg": "logo.svg" }; // servidos de public/
-const MIME = { ".svg": "image/svg+xml", ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
+const STATIC = { "/": "index.html", "/index.html": "index.html", "/styles.css": "styles.css", "/app.js": "app.js", "/erp.js": "erp.js", "/logo.svg": "logo.svg", "/mantra-logo.png": "mantra-logo.png" }; // servidos de public/
+const MIME = { ".png": "image/png", ".svg": "image/svg+xml", ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
 const tentativas = new Map(); // limite de tentativas de login por IP
 
 function send(res, status, body, headers = {}) {

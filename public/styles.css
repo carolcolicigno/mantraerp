@@ -1,11 +1,13 @@
 :root {
-  --bg: #eceef3;
+  --bg: #f6f5fb;
   --surface: #ffffff;
   --muted-surface: #f1f2f6;
   --line: #e7e8ee;
   --text: #121212;
   --text-2: #5f6170;
-  --accent: #0d3cf2;
+  --accent: #6e4fc6;
+  --accent-2: #5a3db3;
+  --ink: #1b1630;
   --pink: #fde6f3;
   --todo: #d63ce8;
   --progress: #f2b705;
@@ -15,7 +17,7 @@
 }
 
 * { box-sizing: border-box; margin: 0; }
-body { font-family: "Urbanist", system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px; }
+body { font-family: "DM Sans", system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 svg.fill { fill: currentColor; stroke: none; }
@@ -27,7 +29,6 @@ svg.fill { fill: currentColor; stroke: none; }
 .rail__logo { display: block; width: 36px; height: 36px; margin-bottom: 16px; border-radius: 50%; }
 .rail__logo img { display: block; width: 36px; height: 36px; }
 .rail__logo:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.login__logo { width: 48px; height: 48px; }
 .rail__btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: #333; }
 .rail__btn:hover { background: var(--muted-surface); }
 .rail__btn.is-active { color: #fff; background: radial-gradient(circle at 30% 30%, #ff8adf, #a24cf5 60%, #5b3df5); box-shadow: 0 6px 18px rgba(162,76,245,.45); }
@@ -136,12 +137,6 @@ svg.fill { fill: currentColor; stroke: none; }
 .user-menu { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .user-avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--pink); color: #8a1f5c; }
 .app[hidden], .login[hidden] { display: none; }
-.login { min-height: calc(100vh - 48px); display: grid; place-items: center; }
-.login__card { background: #fff; border-radius: 24px; padding: 32px; width: min(380px, 100%); display: grid; gap: 14px; box-shadow: 0 0 0 12px #f5f6f9; }
-.login__card h1 { font-size: 26px; }
-.login__card label { display: grid; gap: 4px; font-size: 12px; color: var(--text-2); }
-.login__card input { font: inherit; font-size: 14px; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-.login__card .btn-primary { padding: 11px; }
 .login__erro { color: #c62828; font-size: 13px; min-height: 1em; }
 .app.erp-mode { grid-template-columns: 72px 1fr; }
 .app.erp-mode > .projects, .app.erp-mode > .main { display: none; }
@@ -242,3 +237,37 @@ svg.fill { fill: currentColor; stroke: none; }
 .dropzone.is-over, .dropzone:hover { border-color: var(--accent); background: #f5f7ff; }
 .btn-mini { font-size: 12px; padding: 4px 8px; border-radius: 8px; background: var(--muted-surface); color: var(--text) !important; text-decoration: none; }
 @media (max-width: 1000px) { .dialog--wide .form-grid { grid-template-columns: 1fr; } }
+
+/* ===== Identidade Mantra ===== */
+h1, h2, .erp__title, .projects__title, .main__title, .panel__title { font-family: "Archivo", "DM Sans", sans-serif; letter-spacing: -0.02em; }
+.btn-primary { background: var(--accent); }
+.btn-primary:hover { background: var(--accent-2); }
+.tabs button.is-active { color: var(--accent); border-color: var(--accent); }
+.rail__btn.is-active { background: linear-gradient(135deg, #b44fc9, #e94aa6 45%, #f6884e); box-shadow: 0 6px 18px rgba(233, 74, 166, .35); }
+.app { box-shadow: 0 0 0 12px #efedf8; }
+
+.login { min-height: calc(100vh - 48px); display: grid; place-items: center; background: radial-gradient(1200px 500px at 50% 0%, #fbfaff, transparent), var(--bg); }
+.login__wrap { width: min(300px, 100%); display: flex; flex-direction: column; align-items: center; text-align: center; }
+.login__brand { width: 150px; height: auto; margin-bottom: 26px; }
+.login__title { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 24px; letter-spacing: -0.03em; color: var(--ink); margin: 0; }
+.login__title span { color: var(--accent); }
+.login__tagline { font-size: 11px; font-weight: 600; color: #4a4560; margin: 6px 0 28px; }
+.login__card { width: 300px; max-width: 100%; background: #fff; border-radius: 14px; padding: 26px 18px 20px; box-shadow: 0 10px 30px rgba(40, 24, 90, .10), 0 1px 3px rgba(40, 24, 90, .06); text-align: left; display: flex; flex-direction: column; }
+.login__hello { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 19px; color: var(--accent); text-align: center; letter-spacing: -0.02em; margin: 0; }
+.login__sub { font-size: 9px; font-weight: 700; letter-spacing: .18em; color: #3b3650; text-align: center; margin: 6px 0 26px; }
+.login__label { font-size: 9px; font-weight: 700; letter-spacing: .16em; color: #3b3650; margin: 0 0 6px 2px; }
+.login__row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 16px; }
+.login__forgot { font-size: 7.5px; font-weight: 700; letter-spacing: .08em; color: var(--accent); padding: 0; }
+.login__card input { font: inherit; font-size: 12px; color: var(--ink); width: 100%; border: 1px solid #e3e1ec; border-radius: 10px; padding: 10px 12px; background: #fff; outline: none; transition: border-color .15s, box-shadow .15s; }
+.login__card input::placeholder { color: #4a4560; opacity: .85; }
+.login__card input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110, 79, 198, .15); }
+.login__pass { position: relative; }
+.login__pass input { padding-right: 38px; }
+.login__eye { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #4a4560; padding: 4px; display: grid; }
+.login__eye svg { width: 15px; height: 15px; }
+.login__eye[aria-pressed="true"] { color: var(--accent); }
+.login__erro { color: #c62828; font-size: 11px; min-height: 14px; margin: 8px 0 4px; }
+.login__btn { background: var(--accent); color: #fff; font-family: "Archivo", sans-serif; font-weight: 700; font-size: 11px; letter-spacing: .04em; border-radius: 9px; padding: 12px; transition: background .15s; }
+.login__btn:hover { background: var(--accent-2); }
+.login__btn:disabled { opacity: .6; cursor: wait; }
+@media (min-width: 1400px) { .login__wrap, .login__card { width: 330px; } }
