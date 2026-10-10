@@ -13,7 +13,7 @@ const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const escH = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 /* ---------- Comunicação com o servidor ---------- */
-const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas", "extrato", "atividades"];
+const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas", "extrato", "atividades", "concorrencias"];
 let db = null;
 let me = null;
 let synced = {};
@@ -97,8 +97,8 @@ const PERFIS = {
   gestor: { label: "Gestor", modulos: ["overview", "projetos", "servicos", "vendas", "contratos", "compras", "pessoas", "relatorios", "aprovacoes"], aprova: true },
   colaborador: { label: "Colaborador", modulos: ["projetos", "servicos", "compras"], aprova: false },
 };
-const can = (mod) => { const p = PERFIS[currentUser().perfil]; return p.modulos === "*" || p.modulos.includes(mod); };
-const canApprove = () => PERFIS[currentUser().perfil].aprova;
+const can = (mod) => mod === "usuarios" ? currentUser().perfil === "admin" : (currentUser().modulosEfetivos || []).includes(mod);
+const canApprove = () => !!currentUser().podeAprovar;
 
 /* ---------- Esquemas de cadastro ---------- */
 const opts = (col, key = "nome") => () => db[col].map((x) => x[key]);
@@ -107,7 +107,7 @@ const SCHEMAS = {
     { k: "tipo", label: "Tipo", type: "select", options: ["receber", "pagar"] },
     { k: "descricao", label: "Descrição" },
     { k: "parceiro", label: "Cliente / Fornecedor" },
-    { k: "categoria", label: "Categoria", type: "select", options: ["Fee", "Projeto", "Produção", "Mídia", "Software", "Estrutura", "Pessoal", "Impostos", "Outros"] },
+    { k: "categoria", label: "Categoria", type: "select", options: ["Fee", "Projeto", "Produção", "Mídia", "Software", "Estrutura", "Pessoal", "Impostos", "Concorrência", "Outros"] },
     { k: "valor", label: "Valor", type: "money" },
     { k: "vencimento", label: "Vencimento", type: "date" },
     { k: "status", label: "Status", type: "select", options: ["aberto", "pago"] },
@@ -146,6 +146,8 @@ const SCHEMAS = {
     { k: "bairro", label: "Bairro", optional: true },
     { k: "cidade", label: "Cidade", optional: true },
     { k: "uf", label: "UF", optional: true, maxlength: 2 },
+    { section: "Links de pastas" },
+    { k: "links", label: "Um por linha, no formato: Nome | https://link (Drive, Dropbox, OneDrive…)", type: "textarea", optional: true, full: true },
     { section: "Observações" },
     { k: "observacoes", label: "Observações", type: "textarea", optional: true, full: true },
   ] },
@@ -172,6 +174,8 @@ const SCHEMAS = {
     { k: "bairro", label: "Bairro", optional: true },
     { k: "cidade", label: "Cidade", optional: true },
     { k: "uf", label: "UF", optional: true, maxlength: 2 },
+    { section: "Links de pastas" },
+    { k: "links", label: "Um por linha, no formato: Nome | https://link (Drive, Dropbox, OneDrive…)", type: "textarea", optional: true, full: true },
     { section: "Observações" },
     { k: "observacoes", label: "Observações", type: "textarea", optional: true, full: true },
   ] },
@@ -232,6 +236,8 @@ const SCHEMAS = {
     { k: "agencia", label: "Agência", optional: true },
     { k: "contaBancaria", label: "Conta", optional: true },
     { k: "pix", label: "Chave Pix", optional: true },
+    { section: "Links de pastas" },
+    { k: "links", label: "Um por linha, no formato: Nome | https://link (Drive, Dropbox, OneDrive…)", type: "textarea", optional: true, full: true },
   ] },
   atividades: { singular: "Follow-up", fields: [
     { k: "cliente", label: "Cliente", type: "select", options: opts("clientes") },
@@ -251,10 +257,29 @@ const SCHEMAS = {
     { k: "comentarios", label: "Comentários", type: "number" },
     { k: "anexos", label: "Anexos", type: "number" },
   ] },
-  usuarios: { singular: "Usuário", fields: [
-    { k: "nome", label: "Nome" }, { k: "email", label: "E-mail" },
-    { k: "perfil", label: "Perfil", type: "select", options: Object.keys(PERFIS) },
+  usuarios: { singular: "Usuário", wide: true, fields: [
+    { section: "Acesso" },
+    { k: "nome", label: "Nome" }, { k: "email", label: "E-mail de login", type: "email" },
     { k: "senha", label: "Senha (mín. 8; em branco mantém a atual)", type: "password" },
+    { k: "perfil", label: "Perfil", type: "select", options: () => Object.keys(PERFIS), labels: { admin: "Administrador", financeiro: "Financeiro", gestor: "Gestor", colaborador: "Colaborador" } },
+    { k: "colaborador", label: "Colaborador vinculado", type: "select", options: () => ["", ...db.colaboradores.map((c) => c.nome)] },
+    { k: "ativo", label: "Acesso ativo", type: "bool" },
+    { section: "Permissões personalizadas (opcional)" },
+    { k: "modulos", label: "Marque só se este usuário precisar de módulos diferentes do padrão do perfil. Administradores sempre veem tudo.", type: "checks", full: true, options: () => MODULOS_PERM, labels: () => Object.fromEntries(MODULOS_PERM.map((m) => [m, MODULES[m].label])) },
+    { k: "aprovacao", label: "Pode aprovar despesas e compras?", type: "select", options: ["perfil", "sim", "nao"], labels: { perfil: "Padrão do perfil", sim: "Sim", nao: "Não" } },
+  ] },
+  concorrencias: { singular: "Concorrência", wide: true, fields: [
+    { section: "Concorrência" },
+    { k: "nome", label: "Nome da concorrência", full: true },
+    { k: "cliente", label: "Cliente ou prospect" },
+    { k: "status", label: "Status", type: "select", options: ["em preparação", "apresentada", "ganha", "perdida", "cancelada"] },
+    { k: "responsavel", label: "Responsável", type: "select", options: () => ["", ...db.colaboradores.map((c) => c.nome)] },
+    { k: "dataApresentacao", label: "Data de apresentação", type: "date", optional: true },
+    { k: "valorEstimado", label: "Verba / valor estimado da conta (anual)", type: "money" },
+    { section: "Links de pastas" },
+    { k: "links", label: "Um por linha, no formato: Nome | https://link (Drive, Dropbox, OneDrive…)", type: "textarea", optional: true, full: true },
+    { section: "Observações" },
+    { k: "observacoes", label: "Observações", type: "textarea", optional: true, full: true },
   ] },
 };
 
@@ -283,7 +308,13 @@ function openForm(col, record, defaults = {}) {
       const o = typeof f.options === "function" ? f.options() : f.options;
       input = `<select name="${f.k}">${o.map((x) => `<option value="${escH(x)}" ${x === v ? "selected" : ""}>${escH(f.labels?.[x] ?? x)}</option>`).join("")}</select>`;
     } else if (f.type === "bool") {
-      input = `<input type="checkbox" name="${f.k}" ${v ? "checked" : ""} />`;
+      const marcado = f.k === "ativo" && !record ? true : v;
+      input = `<input type="checkbox" name="${f.k}" ${marcado ? "checked" : ""} />`;
+    } else if (f.type === "checks") {
+      const o = typeof f.options === "function" ? f.options() : f.options;
+      const lb = typeof f.labels === "function" ? f.labels() : f.labels || {};
+      const sel = Array.isArray(v) ? v : [];
+      return `<fieldset class="checks full"><legend>${f.label}</legend>${o.map((x) => `<label class="check"><input type="checkbox" name="${f.k}" value="${escH(x)}" ${sel.includes(x) ? "checked" : ""} />${escH(lb[x] ?? x)}</label>`).join("")}</fieldset>`;
     } else if (f.type === "image") {
       return `<div class="img-field full"><img id="img-${f.k}" src="${v ? fileUrl(v) : "logo.svg"}" class="${v ? "" : "is-empty"}" alt="" />
         <label class="btn-ghost">Escolher imagem<input type="file" accept="image/png,image/jpeg,image/webp" data-image="${f.k}" hidden /></label>
@@ -356,9 +387,9 @@ async function reduzirImagem(file) {
   return blob || file;
 }
 const paraBase64 = (blob) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1]); fr.onerror = rej; fr.readAsDataURL(blob); });
-async function enviarArquivo(col, dono, file, categoria = "documento") {
+async function enviarArquivo(col, dono, file, categoria = "documento", tipoDoc = "Outros") {
   if (file.size > 3 * 1024 * 1024) throw new Error(`"${file.name}" é maior que 3 MB`);
-  return apiFetch("/api/arquivos", { col, dono, categoria, nome: file.name, tipo: file.type || "application/octet-stream", dados: await paraBase64(file) });
+  return apiFetch("/api/arquivos", { col, dono, categoria, tipoDoc, nome: file.name, tipo: file.type || "application/octet-stream", dados: await paraBase64(file) });
 }
 async function salvarImagens(col, rec, images) {
   if (!db[col].includes(rec)) return; // o salvamento falhou e os dados foram recarregados
@@ -389,6 +420,7 @@ document.getElementById("recordForm").addEventListener("submit", (e) => {
   for (const f of SCHEMAS[col].fields) {
     if (f.section || f.type === "image") continue;
     if (f.type === "bool") data[f.k] = fd.has(f.k);
+    else if (f.type === "checks") data[f.k] = fd.getAll(f.k).map(String);
     else if (f.type === "money" || f.type === "number") data[f.k] = Number(fd.get(f.k)) || 0;
     else if (f.type === "password") { const v = String(fd.get(f.k) || ""); if (v) data[f.k] = v; }
     else data[f.k] = String(fd.get(f.k) ?? "").trim();
@@ -415,7 +447,7 @@ const labelOf = (r) => r.descricao || r.nome || r.titulo || r.item || r.objeto |
 const PILL = {
   pago: "green", emitida: "green", aprovado: "green", aprovada: "green", pedido: "blue", vigente: "green", ativo: "green",
   aberto: "yellow", "cotação": "yellow", solicitado: "purple", enviada: "blue", rascunho: "", "a vencer": "yellow",
-  atrasado: "red", conciliado: "green", processando: "yellow", erro: "red", hoje: "blue", agendado: "", "concluído": "green", "sem correspondência": "yellow", ignorado: "", pendente: "yellow", "previsão": "blue", recusado: "red", perdida: "red", cancelada: "red", encerrado: "", "aguardando aprovação": "purple",
+  atrasado: "red", ganha: "green", apresentada: "blue", "em preparação": "yellow", cancelada: "", bloqueado: "red", "lançado": "green", conciliado: "green", processando: "yellow", erro: "red", hoje: "blue", agendado: "", "concluído": "green", "sem correspondência": "yellow", ignorado: "", pendente: "yellow", "previsão": "blue", recusado: "red", perdida: "red", cancelada: "red", encerrado: "", "aguardando aprovação": "purple",
 };
 const pill = (s) => `<span class="pill pill--${PILL[s] ?? ""}">${escH(s)}</span>`;
 const kpi = (label, value, hint = "", cls = "") => `<div class="kpi"><div class="kpi__label">${label}</div><div class="kpi__value ${cls}">${value}</div>${hint ? `<div class="kpi__hint">${hint}</div>` : ""}</div>`;
@@ -544,7 +576,25 @@ function exportarCSV(nome, header, rows) {
   log("Exportação", nome);
 }
 
+/* ----- Links de pastas ----- */
+function parseLinks(txt) {
+  return String(txt || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+    const [a, b] = l.includes("|") ? l.split("|").map((x) => x.trim()) : ["", l];
+    const url = b || a;
+    try { const u = new URL(url); if (!/^https?:$/.test(u.protocol)) return null; return { nome: a || u.hostname, url: u.href }; } catch { return null; }
+  }).filter(Boolean);
+}
+const linksHtml = (rec) => { const l = parseLinks(rec.links); return l.length ? `<div class="links">${l.map((x) => `<a class="link-chip" href="${escH(x.url)}" target="_blank" rel="noopener noreferrer">🔗 ${escH(x.nome)}</a>`).join("")}</div>` : ""; };
+
 /* ----- Documentos anexados ----- */
+const TIPOS_DOC = {
+  colaboradores: ["Contrato de trabalho", "Contrato PJ", "RG / CNH", "CPF", "Comprovante de residência", "Carteira de trabalho", "Atestado / exame", "Certificado", "Outros"],
+  clientes: ["Contrato", "Aditivo", "Proposta assinada", "Cartão CNPJ", "Briefing", "NDA", "Outros"],
+  fornecedores: ["Contrato", "Orçamento", "Cartão CNPJ", "Nota fiscal", "Outros"],
+  contratos: ["Contrato assinado", "Aditivo", "Distrato", "Outros"],
+  concorrencias: ["Briefing / edital", "Apresentação", "Orçamento", "Comprovante de gasto", "Outros"],
+  projetos: ["Briefing", "Cronograma", "Aprovação", "Outros"],
+};
 const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
 const docsCount = (col, id) => db.docs?.[col]?.[id] || 0;
 const docsAction = (col) => (r) => ({ label: `Documentos (${docsCount(col, r.id)})`, fn: () => abrirDocumentos(col, r) });
@@ -556,19 +606,22 @@ async function abrirDocumentos(col, rec) {
     let lista = [];
     try { lista = await apiFetch(`/api/arquivos?col=${col}&dono=${encodeURIComponent(rec.id)}`); } catch (e) { toast(e.message); }
     db.docs ||= {}; (db.docs[col] ||= {})[rec.id] = lista.length;
+    const tipos = TIPOS_DOC[col] || ["Outros"];
     dlg.innerHTML = `<h2>Documentos — ${escH(labelOf(rec))}</h2>
-      ${lista.length ? `<table class="table"><thead><tr><th>Arquivo</th><th class="num">Tamanho</th><th>Enviado por</th><th>Data</th><th></th></tr></thead><tbody>
-        ${lista.map((a) => `<tr><td><a href="${fileUrl(a.id)}" target="_blank" rel="noopener">${escH(a.nome)}</a></td><td class="num">${fmtBytes(a.tamanho)}</td>
+      ${parseLinks(rec.links).length ? `<h3 class="form-section">Links de pastas</h3>${linksHtml(rec)}<h3 class="form-section">Arquivos</h3>` : ""}
+      ${lista.length ? `<table class="table"><thead><tr><th>Arquivo</th><th>Tipo</th><th class="num">Tamanho</th><th>Enviado por</th><th>Data</th><th></th></tr></thead><tbody>
+        ${lista.map((a) => `<tr><td><a href="${fileUrl(a.id)}" target="_blank" rel="noopener">${escH(a.nome)}</a></td><td>${pill(a.tipo_doc || "Outros")}</td><td class="num">${fmtBytes(a.tamanho)}</td>
           <td>${escH(a.criado_por)}</td><td>${new Date(a.criado_em).toLocaleDateString("pt-BR")}</td>
           <td><div class="row-actions"><a class="btn-mini" href="${fileUrl(a.id)}" download="${escH(a.nome)}">Baixar</a>${podeEditar ? `<button class="no" data-del="${a.id}">Excluir</button>` : ""}</div></td></tr>`).join("")}
       </tbody></table>` : `<p class="empty">Nenhum documento anexado.</p>`}
-      ${podeEditar ? `<label class="dropzone" id="docDrop"><input type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt" />
+      ${podeEditar ? `<label class="doc-tipo">Tipo do documento <select id="docTipo">${tipos.map((t) => `<option>${escH(t)}</option>`).join("")}</select></label>
+        <label class="dropzone" id="docDrop"><input type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt" />
         <b>Clique para anexar</b> ou arraste arquivos aqui<br /><span class="crumbs">PDF, imagens, Word, Excel, CSV ou TXT · até 3 MB cada</span></label>` : ""}
       <div class="dialog__actions"><button class="btn-ghost" data-close>Fechar</button></div>`;
   };
   const enviar = async (files) => {
     for (const f of files) {
-      try { toast(`Enviando ${f.name}…`); await enviarArquivo(col, rec.id, f); } catch (e) { toast(e.message); }
+      try { toast(`Enviando ${f.name}…`); await enviarArquivo(col, rec.id, f, "documento", document.getElementById("docTipo")?.value); } catch (e) { toast(e.message); }
     }
     await draw(); renderView();
   };
@@ -581,12 +634,13 @@ async function abrirDocumentos(col, rec) {
     }
   };
   dlg.onchange = (e) => { if (e.target.type === "file" && e.target.files.length) enviar([...e.target.files]); };
+  dlg.onclose = () => renderView();
   dlg.ondragover = (e) => { e.preventDefault(); document.getElementById("docDrop")?.classList.add("is-over"); };
   dlg.ondragleave = () => document.getElementById("docDrop")?.classList.remove("is-over");
   dlg.ondrop = (e) => { e.preventDefault(); if (podeEditar && e.dataTransfer.files.length) enviar([...e.dataTransfer.files]); };
   await draw(); dlg.showModal();
 }
-const MODULO_DOC = { clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos" };
+const MODULO_DOC = { concorrencias: "vendas", clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos" };
 const thumb = (id, nome, redondo) => `<span class="thumb-cell">${id ? `<img class="thumb ${redondo ? "thumb--round" : ""}" src="${fileUrl(id)}" alt="" loading="lazy" />` : `<span class="thumb thumb--empty ${redondo ? "thumb--round" : ""}">${escH(String(nome || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase())}</span>`}${escH(nome)}</span>`;
 
 /* ----- Cotações lado a lado ----- */
@@ -660,6 +714,7 @@ const ICON = {
   servicos: '<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
   pessoas: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
   relatorios: '<path d="M6 20v-6M12 20V6M18 20v-9"/>',
+  usuarios: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 11v6M14 14h6"/>',
   aprovacoes: '<path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
 };
 
@@ -687,6 +742,7 @@ const MODULES = {
   vendas: { label: "Vendas e clientes", tabs: {
     "Propostas e pedidos": renderPropostas,
     "Follow-ups": renderFollowups,
+    Concorrências: renderConcorrencias,
     Clientes: () => table({ title: "Clientes", rows: db.clientes, addCol: "clientes",
       cols: [{ label: "Cliente", get: (r) => thumb(r.logoId, r.nome) }, { label: "CNPJ", get: txt("cnpj") }, { label: "Contato", get: (r) => escH([r.contatoNome, r.contato, r.telefone].filter(Boolean).join(" · ") || "—") }, { label: "Cidade", get: (r) => escH([r.cidade, r.uf].filter(Boolean).join("/") || "—") }, { label: "Segmento", get: (r) => (r.segmento ? pill(r.segmento) : "—") },
         { label: "Receita (12m)", num: true, get: (r) => BRL(sum(receber().filter((c) => c.parceiro === r.nome && c.status === "pago"), (c) => c.valor)) },
@@ -697,9 +753,9 @@ const MODULES = {
   servicos: { label: "Projetos e serviços", render: renderServicos },
   pessoas: { label: "Pessoas", render: renderPessoas },
   relatorios: { label: "Relatórios gerenciais", render: renderRelatorios },
-  aprovacoes: { label: "Aprovações e acessos", tabs: {
+  usuarios: { label: "Usuários e acessos", tabs: { Usuários: renderUsuarios, "Permissões por perfil": renderMatriz } },
+  aprovacoes: { label: "Aprovações e configurações", tabs: {
     "Aprovações pendentes": renderAprovacoes,
-    "Usuários e permissões": renderUsuarios,
     "Configurações": renderConfig,
     "Histórico de alterações": () => table({ title: "Histórico de alterações", rows: db.historico,
       cols: [{ label: "Quando", get: txt("quando") }, { label: "Usuário", get: txt("usuario") }, { label: "Ação", get: (r) => pill(r.acao) }, { label: "Detalhe", get: txt("detalhe") }] }),
@@ -1007,16 +1063,107 @@ function renderAprovacoes() {
     actions: canApprove() ? (r) => [{ label: "Aprovar", cls: "ok", fn: () => decidirCompra(r, true) }, { label: "Recusar", cls: "no", fn: () => decidirCompra(r, false) }] : null });
 }
 
+const MODULOS_PERM = ["overview", "projetos", "financeiro", "faturamento", "compras", "vendas", "contratos", "servicos", "pessoas", "relatorios", "aprovacoes"];
+const modulosEfetivos = (u) => u.ativo === false ? [] : u.perfil === "admin" ? MODULOS_PERM : (u.modulos?.length ? u.modulos : PERFIS[u.perfil]?.modulos || []);
 function renderUsuarios() {
-  const isAdmin = currentUser().perfil === "admin";
-  const mods = Object.keys(MODULES);
-  return table({ title: "Usuários", rows: db.usuarios, addCol: isAdmin ? "usuarios" : null, addDefaults: { perfil: "colaborador" },
-    cols: [{ label: "Nome", get: txt("nome") }, { label: "E-mail", get: txt("email") }, { label: "Perfil", get: (r) => pill(PERFIS[r.perfil]?.label || r.perfil) }],
-    actions: isAdmin ? editDel("usuarios") : null }) +
-  `<div class="panel"><div class="panel__head"><h3 class="panel__title">Matriz de permissões por perfil</h3></div>
+  const ativos = db.usuarios.filter((u) => u.ativo !== false);
+  return `<div class="kpis">${kpi("Usuários ativos", ativos.length)}${kpi("Administradores", ativos.filter((u) => u.perfil === "admin").length)}${kpi("Com permissões personalizadas", db.usuarios.filter((u) => u.modulos?.length).length)}${kpi("Bloqueados", db.usuarios.length - ativos.length, "", db.usuarios.length - ativos.length ? "neg" : "")}</div>` +
+  table({ title: "Usuários", rows: db.usuarios, addCol: "usuarios", addDefaults: { perfil: "colaborador", ativo: true, aprovacao: "perfil", modulos: [] },
+    cols: [
+      { label: "Nome", get: (r) => { const c = db.colaboradores.find((x) => x.nome === (r.colaborador || r.nome)); return thumb(c?.fotoId, r.nome, true); } },
+      { label: "E-mail", get: txt("email") },
+      { label: "Perfil", get: (r) => pill(PERFIS[r.perfil]?.label || r.perfil) },
+      { label: "Acesso a", get: (r) => r.perfil === "admin" ? "Tudo" : `${modulosEfetivos(r).length} módulos${r.modulos?.length ? " · personalizado" : ""}` },
+      { label: "Aprova", get: (r) => (r.perfil === "admin" || (r.aprovacao === "sim") || (r.aprovacao !== "nao" && PERFIS[r.perfil]?.aprova) ? "Sim" : "Não") },
+      { label: "Status", get: (r) => pill(r.ativo === false ? "bloqueado" : "ativo") }],
+    actions: (r) => [
+      r.id !== currentUser().id && { label: r.ativo === false ? "Desbloquear" : "Bloquear", cls: r.ativo === false ? "ok" : "no", fn: () => { r.ativo = r.ativo === false; log(r.ativo ? "Usuário desbloqueado" : "Usuário bloqueado", r.email); render(); } },
+      { label: "Editar", fn: () => openForm("usuarios", r) },
+      r.id !== currentUser().id && { label: "Excluir", cls: "no", fn: () => { if (confirm(`Excluir o usuário ${r.email}? Prefira bloquear para manter o histórico.`)) { db.usuarios = db.usuarios.filter((x) => x.id !== r.id); log("Exclusão", `Usuário: ${r.email}`); render(); } } },
+    ] }) +
+  `<div class="panel empty">Dica: para quem sai da agência, use <b>Bloquear</b> em vez de excluir — o acesso é cortado na hora e o histórico continua registrado.</div>`;
+}
+function renderMatriz() {
+  return `<div class="panel"><div class="panel__head"><h3 class="panel__title">O que cada perfil acessa por padrão</h3></div>
     <table class="table matrix"><thead><tr><th>Módulo</th>${Object.values(PERFIS).map((p) => `<th>${p.label}</th>`).join("")}</tr></thead>
-    <tbody>${mods.map((mod) => `<tr><td>${MODULES[mod].label}</td>${Object.values(PERFIS).map((p) => `<td>${p.modulos === "*" || p.modulos.includes(mod) ? "✓" : "—"}</td>`).join("")}</tr>`).join("")}
-    <tr><td>Aprovar despesas e compras</td>${Object.values(PERFIS).map((p) => `<td>${p.aprova ? "✓" : "—"}</td>`).join("")}</tr></tbody></table></div>`;
+    <tbody>${MODULOS_PERM.map((mod) => `<tr><td>${MODULES[mod].label}</td>${Object.values(PERFIS).map((p) => `<td>${p.modulos === "*" || p.modulos.includes(mod) ? "✓" : "—"}</td>`).join("")}</tr>`).join("")}
+    <tr><td>Aprovar despesas e compras</td>${Object.values(PERFIS).map((p) => `<td>${p.aprova ? "✓" : "—"}</td>`).join("")}</tr>
+    <tr><td>Usuários e acessos</td>${Object.keys(PERFIS).map((k) => `<td>${k === "admin" ? "✓" : "—"}</td>`).join("")}</tr></tbody></table>
+    <p class="empty">Cada usuário pode ter módulos diferentes do padrão: edite o usuário e marque as permissões personalizadas. Dados pessoais e salários dos colaboradores só aparecem para quem tem o módulo Pessoas.</p></div>`;
+}
+
+/* ----- Concorrências (pitches) ----- */
+const CAT_CUSTO = ["Criação / horas internas", "Produção", "Mídia / testes", "Pesquisa", "Viagem e deslocamento", "Fornecedor externo", "Impressão / materiais", "Outros"];
+const custoTotal = (c) => sum(c.custos || [], (x) => x.valor);
+function renderConcorrencias() {
+  const rows = [...db.concorrencias].sort((a, b) => String(b.dataApresentacao || "").localeCompare(String(a.dataApresentacao || "")));
+  const ganhas = rows.filter((c) => c.status === "ganha"), perdidas = rows.filter((c) => c.status === "perdida");
+  const investido = sum(rows, custoTotal);
+  const andamento = rows.filter((c) => ["em preparação", "apresentada"].includes(c.status));
+  const verbaGanha = sum(ganhas, (c) => c.valorEstimado);
+  return `<div class="kpis">
+    ${kpi("Investido em concorrências", BRL(investido), `${rows.length} concorrências`)}
+    ${kpi("Em andamento", andamento.length, BRL(sum(andamento, custoTotal)) + " gastos até agora")}
+    ${kpi("Taxa de vitória", ganhas.length + perdidas.length ? Math.round((ganhas.length / (ganhas.length + perdidas.length)) * 100) + "%" : "—", `${ganhas.length} ganhas · ${perdidas.length} perdidas`, "pos")}
+    ${kpi("Retorno", investido ? (verbaGanha / investido).toFixed(1).replace(".", ",") + "x" : "—", `verba anual ganha ${BRL(verbaGanha)}`)}
+  </div>` + table({ title: "Concorrências", rows, addCol: "concorrencias", addDefaults: { status: "em preparação", custos: [], valorEstimado: 0, responsavel: currentUser().nome },
+    cols: [{ label: "Concorrência", get: (r) => `<b>${escH(r.nome)}</b>${linksHtml(r)}` }, { label: "Cliente / prospect", get: txt("cliente") }, { label: "Status", get: (r) => pill(r.status) },
+      { label: "Apresentação", get: date("dataApresentacao") }, { label: "Responsável", get: (r) => escH(r.responsavel || "—") },
+      { label: "Custos", num: true, get: (r) => BRL(custoTotal(r)) }, { label: "Verba estimada", num: true, get: money("valorEstimado") }],
+    actions: (r) => [
+      { label: `Custos (${(r.custos || []).length})`, cls: "main", fn: () => abrirCustos(r) },
+      r.status === "apresentada" && { label: "Ganhou", cls: "ok", fn: () => ganharConcorrencia(r) },
+      r.status === "apresentada" && { label: "Perdeu", cls: "no", fn: () => { r.status = "perdida"; log("Concorrência perdida", r.nome); render(); } },
+      r.status === "em preparação" && { label: "Apresentada", fn: () => { r.status = "apresentada"; r.dataApresentacao ||= TODAY; log("Concorrência apresentada", r.nome); render(); } },
+      docsAction("concorrencias")(r), ...editDel("concorrencias")(r)] });
+}
+function ganharConcorrencia(r) {
+  r.status = "ganha";
+  if (!db.propostas.some((v) => v.titulo === r.nome)) db.propostas.push({ id: uid(), cliente: r.cliente, titulo: r.nome, valor: Number(r.valorEstimado) || 0, data: TODAY, status: "aprovada" });
+  log("Concorrência ganha", `${r.nome} — proposta criada em Propostas e pedidos`);
+  toast("Parabéns! Proposta criada em Propostas e pedidos"); render();
+}
+function abrirCustos(c) {
+  c.custos ||= [];
+  let dlg = document.getElementById("custoDialog");
+  if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "custoDialog"; dlg.className = "dialog dialog--wide"; document.body.appendChild(dlg); }
+  const draw = () => {
+    dlg.innerHTML = `<h2>Custos — ${escH(c.nome)}</h2>
+      <div class="kpis">${kpi("Total gasto", BRL(custoTotal(c)))}${kpi("Lançado no financeiro", BRL(sum(c.custos.filter((x) => x.contaId), (x) => x.valor)))}</div>
+      ${c.custos.length ? `<table class="table"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Fornecedor</th><th class="num">Valor</th><th>Financeiro</th><th></th></tr></thead><tbody>
+        ${c.custos.map((x, i) => `<tr><td>${fmtDate(x.data)}</td><td>${escH(x.descricao)}</td><td>${pill(x.categoria)}</td><td>${escH(x.fornecedor || "—")}</td><td class="num">${BRL(x.valor)}</td>
+          <td>${x.contaId ? pill("lançado") : "—"}</td>
+          <td><div class="row-actions">${!x.contaId && x.categoria !== "Criação / horas internas" ? `<button class="main" data-lancar="${i}">Lançar em contas a pagar</button>` : ""}<button class="no" data-del="${i}">Remover</button></div></td></tr>`).join("")}
+      </tbody></table>` : `<p class="empty">Nenhum custo lançado.</p>`}
+      <form class="form-grid" id="custoForm" style="margin-top:16px;grid-template-columns:repeat(3,1fr)">
+        <label class="full">Descrição<input name="descricao" required /></label>
+        <label>Categoria<select name="categoria">${CAT_CUSTO.map((x) => `<option>${x}</option>`).join("")}</select></label>
+        <label>Valor<input name="valor" type="number" step="0.01" min="0" required /></label>
+        <label>Data<input name="data" type="date" value="${TODAY}" required /></label>
+        <label>Fornecedor<input name="fornecedor" list="custoForn" /></label>
+        <datalist id="custoForn">${db.fornecedores.map((f) => `<option value="${escH(f.nome)}">`).join("")}</datalist>
+        <div class="dialog__actions" style="grid-column:1/-1;margin-top:0"><button class="btn-primary" type="submit">Adicionar custo</button></div></form>
+      <p class="empty">Horas internas entram no custo da concorrência, mas não viram conta a pagar. Os demais custos podem ser lançados no Financeiro na categoria "Concorrência".</p>
+      <div class="dialog__actions"><button class="btn-ghost" data-close>Fechar</button></div>`;
+  };
+  dlg.onclick = (e) => {
+    if (e.target.closest("[data-close]")) return dlg.close();
+    const del = e.target.closest("[data-del]"), lanc = e.target.closest("[data-lancar]");
+    if (del && confirm("Remover este custo?")) { const x = c.custos[Number(del.dataset.del)]; c.custos.splice(Number(del.dataset.del), 1); log("Custo de concorrência removido", `${c.nome}: ${x.descricao}`); render(); draw(); }
+    if (lanc) {
+      const x = c.custos[Number(lanc.dataset.lancar)];
+      const conta = { id: uid(), tipo: "pagar", descricao: `Concorrência ${c.nome}: ${x.descricao}`, parceiro: x.fornecedor || "A definir", categoria: "Concorrência", valor: x.valor, vencimento: x.data > TODAY ? x.data : addDays(TODAY, 7), status: "aberto", conciliado: false, aprovado: canApprove() || x.valor < 5000 };
+      db.contas.push(conta); x.contaId = conta.id;
+      log("Custo lançado no financeiro", `${c.nome}: ${x.descricao} — ${BRL(x.valor)}`); toast(conta.aprovado ? "Lançado em Contas a pagar" : "Lançado em Contas a pagar — aguardando aprovação"); render(); draw();
+    }
+  };
+  dlg.onsubmit = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    c.custos.push({ descricao: String(fd.get("descricao")).trim(), categoria: fd.get("categoria"), valor: Number(fd.get("valor")) || 0, data: fd.get("data"), fornecedor: String(fd.get("fornecedor") || "").trim() });
+    log("Custo de concorrência", `${c.nome}: ${fd.get("descricao")} — ${BRL(fd.get("valor"))}`); render(); draw();
+  };
+  draw(); dlg.showModal();
 }
 
 const REGIMES = { "Simples Nacional": 11.33, "Lucro Presumido": 16.33, "Lucro Real": 21.25 };

@@ -40,8 +40,8 @@ function queries(exec, dialect) {
     purgeSess: (now) => exec("DELETE FROM sessoes WHERE expira < ?", [now]),
     log: async (quando, usuario, acao, detalhe) => Number((await exec("INSERT INTO historico (quando, usuario, acao, detalhe) VALUES (?, ?, ?, ?) RETURNING id", [quando, usuario, acao, detalhe]))[0].id),
     // Arquivos (conteúdo em base64; metadados listados sem o conteúdo).
-    arqPut: (a) => exec("INSERT INTO arquivos (id, col, dono, categoria, nome, tipo, tamanho, dados, criado_por, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [a.id, a.col, a.dono, a.categoria, a.nome, a.tipo, a.tamanho, a.dados, a.criado_por, a.criado_em]),
-    arqList: async (col, dono) => (await exec("SELECT id, col, dono, categoria, nome, tipo, tamanho, criado_por, criado_em FROM arquivos WHERE col = ? AND dono = ? ORDER BY criado_em DESC", [col, dono])).map((a) => ({ ...a, tamanho: Number(a.tamanho) })),
+    arqPut: (a) => exec("INSERT INTO arquivos (id, col, dono, categoria, nome, tipo, tamanho, dados, criado_por, criado_em, tipo_doc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [a.id, a.col, a.dono, a.categoria, a.nome, a.tipo, a.tamanho, a.dados, a.criado_por, a.criado_em, a.tipo_doc || "Outros"]),
+    arqList: async (col, dono) => (await exec("SELECT id, col, dono, categoria, nome, tipo, tamanho, criado_por, criado_em, tipo_doc FROM arquivos WHERE col = ? AND dono = ? ORDER BY criado_em DESC", [col, dono])).map((a) => ({ ...a, tamanho: Number(a.tamanho) })),
     arqCount: async (col) => (await exec("SELECT dono, COUNT(*) AS n FROM arquivos WHERE col = ? AND categoria = 'documento' GROUP BY dono", [col])).reduce((o, r) => ((o[r.dono] = Number(r.n)), o), {}),
     arqGet: async (id) => (await exec("SELECT * FROM arquivos WHERE id = ?", [id]))[0] || null,
     arqMeta: async (id) => (await exec("SELECT id, col, dono, categoria, nome, tipo, tamanho FROM arquivos WHERE id = ?", [id]))[0] || null,
@@ -56,6 +56,7 @@ function sqliteStore(file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec("PRAGMA journal_mode = WAL;" + SCHEMA.sqlite);
+  try { db.exec("ALTER TABLE arquivos ADD COLUMN tipo_doc TEXT"); } catch { /* coluna já existe */ }
   const exec = async (sql, params) => {
     const st = db.prepare(sql);
     return /^\s*(SELECT|INSERT[\s\S]*RETURNING)/i.test(sql) ? st.all(...params) : (st.run(...params), []);
@@ -82,7 +83,7 @@ function pgStore(url) {
   const pool = new Pool({ connectionString: url, max: 3, ssl: local ? false : { rejectUnauthorized: process.env.PG_SSL_NO_VERIFY !== "1" } });
   const toPg = (sql) => { let i = 0; return sql.replace(/\?/g, () => `$${++i}`); };
   const execOn = (client) => async (sql, params) => (await client.query(toPg(sql), params)).rows;
-  const ready = pool.query(SCHEMA.pg);
+  const ready = pool.query(SCHEMA.pg).then(() => pool.query("ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS tipo_doc TEXT"));
   const exec = async (sql, params) => { await ready; return execOn(pool)(sql, params); };
   return {
     dialect: "pg",

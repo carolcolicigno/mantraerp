@@ -31,16 +31,25 @@ const WRITE = {
   projetos: ["servicos", "vendas"],
   colaboradores: ["pessoas"],
   tarefas: ["projetos", "servicos"],
+  concorrencias: ["vendas"],
   extrato: ["financeiro"],
   atividades: ["vendas"],
   usuarios: [], // só admin
   config: [], // só admin
 };
 const COLLECTIONS = Object.keys(WRITE);
-const hasModule = (u, mod) => { const p = PERFIS[u.perfil]; return !!p && (p.modulos === "*" || p.modulos.includes(mod)); };
-const isAdmin = (u) => u.perfil === "admin";
+// Módulos do usuário: lista personalizada (se houver) ou a do perfil. Usuário bloqueado não acessa nada.
+const MODULOS = ["overview", "projetos", "financeiro", "faturamento", "compras", "vendas", "contratos", "servicos", "pessoas", "relatorios", "aprovacoes"];
+const modulosDe = (u) => {
+  if (!u || u.ativo === false || !PERFIS[u.perfil]) return [];
+  if (u.perfil === "admin") return MODULOS;
+  if (Array.isArray(u.modulos) && u.modulos.length) return u.modulos.filter((m) => MODULOS.includes(m));
+  return PERFIS[u.perfil].modulos;
+};
+const hasModule = (u, mod) => modulosDe(u).includes(mod);
+const isAdmin = (u) => u.perfil === "admin" && u.ativo !== false;
 const canWrite = (u, col) => isAdmin(u) || (WRITE[col] || []).some((m) => hasModule(u, m));
-const canApprove = (u) => !!PERFIS[u.perfil]?.aprova;
+const canApprove = (u) => u.ativo !== false && (u.perfil === "admin" || (typeof u.aprova === "boolean" ? u.aprova : !!PERFIS[u.perfil]?.aprova));
 
 const CONFIG_PADRAO = { id: "geral", regime: "Simples Nacional", aliquota: 11.33, encargos: 68, servicoMunicipal: "", iss: 5 };
 
@@ -143,7 +152,7 @@ function cnpjValido(v) {
 const CAMPOS_PUBLICOS_COLAB = ["id", "nome", "cargo", "area", "fotoId", "_rev"];
 
 /* ---------- Arquivos (logos, fotos e documentos) ---------- */
-const ARQ_COLS = { clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos" };
+const ARQ_COLS = { concorrencias: "vendas", clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos" };
 const ARQ_TIPOS = {
   "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", "application/msword": "doc",
@@ -154,6 +163,7 @@ const ARQ_MAX = 3 * 1024 * 1024; // 3 MB por arquivo (limite de envio da Vercel 
 const podeVerArquivo = (u, a) => canWrite(u, a.col) || hasModule(u, ARQ_COLS[a.col]) || (a.categoria === "logo") || (a.categoria === "foto");
 async function enviarArquivo(u, body) {
   const { col, dono, categoria = "documento", nome, tipo, dados } = body || {};
+  const tipoDoc = String(body?.tipoDoc || "Outros").slice(0, 40);
   if (!ARQ_COLS[col]) throw new HttpError(400, "Tipo de cadastro inválido");
   if (!canWrite(u, col)) throw new HttpError(403, "Seu perfil não pode anexar arquivos aqui");
   if (!["documento", "logo", "foto"].includes(categoria)) throw new HttpError(400, "Categoria inválida");
@@ -164,7 +174,7 @@ async function enviarArquivo(u, body) {
   if (tamanho > ARQ_MAX) throw new HttpError(413, "Arquivo maior que 3 MB");
   const rec = await getRec(col, String(dono || ""));
   if (!rec) throw new HttpError(404, "Salve o cadastro antes de anexar arquivos");
-  const a = { id: crypto.randomBytes(12).toString("hex"), col, dono: rec.id, categoria, nome: String(nome || "arquivo").replace(/[\\/\r\n"]/g, "_").slice(0, 150), tipo, tamanho, dados, criado_por: u.nome, criado_em: new Date().toISOString() };
+  const a = { id: crypto.randomBytes(12).toString("hex"), col, dono: rec.id, categoria, nome: String(nome || "arquivo").replace(/[\\/\r\n"]/g, "_").slice(0, 150), tipo, tamanho, dados, criado_por: u.nome, criado_em: new Date().toISOString(), tipo_doc: tipoDoc };
   await store.arqPut(a);
   if (categoria === "documento") await log(u.nome, "Documento anexado", `${col}: ${labelOf(rec)} — ${a.nome}`);
   const { dados: _, ...meta } = a;
@@ -353,7 +363,12 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
         if (!/^[^@\s]+@[^@\s]+$/.test(data.email || "")) throw new HttpError(400, "E-mail inválido");
         const dono = await findUserByEmail(data.email, s);
         if (dono && dono.id !== id) throw new HttpError(400, "E-mail já cadastrado");
-        if (id === u.id && data.perfil !== "admin") throw new HttpError(400, "Você não pode remover seu próprio acesso de administrador");
+        if (id === u.id && (data.perfil !== "admin" || data.ativo === false)) throw new HttpError(400, "Você não pode remover nem bloquear seu próprio acesso de administrador");
+        data.ativo = data.ativo !== false;
+        data.modulos = Array.isArray(data.modulos) ? data.modulos.filter((m) => MODULOS.includes(m)) : [];
+        if (!["sim", "nao", "perfil"].includes(data.aprovacao)) data.aprovacao = "perfil";
+        data.aprova = data.aprovacao === "perfil" ? undefined : data.aprovacao === "sim";
+        if (data.ativo === false) await s.delUserSess(id);
         const senha = data.senha; delete data.senha;
         if (senha) {
           if (String(senha).length < 8) throw new HttpError(400, "A senha precisa ter ao menos 8 caracteres");
@@ -416,7 +431,8 @@ async function usuarioDaSessao(req) {
   if (!token) return null;
   const s = await store.sess(token);
   if (!s || s.expira < Date.now()) { if (s) await store.delSess(token); return null; }
-  return getRec("usuarios", s.user_id);
+  const u = await getRec("usuarios", s.user_id);
+  return u && u.ativo !== false ? u : null;
 }
 
 async function api(req, res, url) {
@@ -434,20 +450,20 @@ async function api(req, res, url) {
     if (t.n >= 10) throw new HttpError(429, "Muitas tentativas. Aguarde 15 minutos.");
     const { email, senha } = await readBody(req);
     const u = await findUserByEmail(email || "");
-    if (!u || !(await confereSenha(u.id, senha || ""))) { t.n++; tentativas.set(ip, t); throw new HttpError(401, "E-mail ou senha incorretos"); }
+    if (!u || u.ativo === false || !(await confereSenha(u.id, senha || ""))) { t.n++; tentativas.set(ip, t); throw new HttpError(401, "E-mail ou senha incorretos"); }
     tentativas.delete(ip);
     await store.purgeSess(Date.now());
     const token = crypto.randomBytes(32).toString("hex");
     await store.putSess(token, u.id, Date.now() + SESSION_DAYS * 864e5);
     await log(u.nome, "Login", u.email);
-    return send(res, 200, { usuario: u }, { "Set-Cookie": sessionCookie(token, SESSION_DAYS * 86400) });
+    return send(res, 200, { usuario: { ...u, modulosEfetivos: modulosDe(u), podeAprovar: canApprove(u) } }, { "Set-Cookie": sessionCookie(token, SESSION_DAYS * 86400) });
   }
 
   const u = await usuarioDaSessao(req);
   if (!u) throw new HttpError(401, "Faça login");
 
   if (route === "POST /api/logout") { await store.delSess(cookies(req).sid); return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie("", 0) }); }
-  if (route === "GET /api/me") return send(res, 200, { usuario: u });
+  if (route === "GET /api/me") return send(res, 200, { usuario: { ...u, modulosEfetivos: modulosDe(u), podeAprovar: canApprove(u) } });
   if (route === "GET /api/data") return send(res, 200, await dadosPara(u));
   if (route === "POST /api/sync") {
     const { entrada, revs } = await aplicarLote(u, await readBody(req));

@@ -5,13 +5,13 @@ const m = (n, day = 10) => addMonths(TODAY.slice(0, 8) + String(day).padStart(2,
 
 module.exports = () => ({
   usuarios: [
-    { id: "u1", nome: "Carol Colicigno", email: "carol@mantra.ag", perfil: "admin" },
+    { id: "u1", nome: "Carol Colicigno", email: "carol@mantra.ag", perfil: "admin", ativo: true, colaborador: "Carol Colicigno" },
     { id: "u2", nome: "Rafael Lima", email: "rafael@mantra.ag", perfil: "financeiro" },
     { id: "u3", nome: "Bia Santos", email: "bia@mantra.ag", perfil: "gestor" },
     { id: "u4", nome: "Leo Prado", email: "leo@mantra.ag", perfil: "colaborador" },
   ],
   clientes: [
-    { id: "c1", nome: "Natura", cnpj: "71.673.990/0001-77", contato: "marketing@natura.com", contatoNome: "Juliana Reis", segmento: "Cosméticos", cidade: "São Paulo", uf: "SP" },
+    { id: "c1", nome: "Natura", cnpj: "71.673.990/0001-77", contato: "marketing@natura.com", contatoNome: "Juliana Reis", segmento: "Cosméticos", cidade: "São Paulo", uf: "SP", links: "Pasta do cliente | https://drive.google.com/drive/folders/exemplo-natura" },
     { id: "c2", nome: "Vivo", cnpj: "02.558.157/0001-62", contato: "brand@vivo.com.br", contatoNome: "Marcos Lima", segmento: "Telecom", cidade: "São Paulo", uf: "SP" },
     { id: "c3", nome: "Havaianas", cnpj: "61.079.117/0001-05", contato: "mkt@havaianas.com", contatoNome: "Paula Souza", segmento: "Moda", cidade: "São Paulo", uf: "SP" },
     { id: "c4", nome: "Nubank", cnpj: "18.236.120/0001-58", contato: "brand@nubank.com.br", contatoNome: "Rodrigo Alves", segmento: "Financeiro", cidade: "São Paulo", uf: "SP" },
@@ -75,6 +75,18 @@ module.exports = () => ({
     { id: "f4", cliente: "Nubank", proposta: "Lançamento cartão Ultravioleta", tipo: "WhatsApp", data: m(-1, 28), responsavel: "Bia Santos", descricao: "Confirmar aprovação do pedido", concluida: true },
   ],
   extrato: [],
+  concorrencias: [
+    { id: "cc1", nome: "Concorrência Banco Aurora — conta digital", cliente: "Banco Aurora", status: "apresentada", responsavel: "Bia Santos", dataApresentacao: m(0, 3), valorEstimado: 960000,
+      links: "Pasta da concorrência | https://drive.google.com/drive/folders/exemplo", custos: [
+        { descricao: "Horas de criação (equipe)", categoria: "Criação / horas internas", valor: 18000, data: m(-1, 20), fornecedor: "" },
+        { descricao: "Filme conceito", categoria: "Produção", valor: 12500, data: m(-1, 26), fornecedor: "Studio Lumen (produtora)" },
+        { descricao: "Pesquisa qualitativa", categoria: "Pesquisa", valor: 6800, data: m(-1, 15), fornecedor: "" }] },
+    { id: "cc2", nome: "Pitch Lumi Cosméticos — lançamento", cliente: "Lumi Cosméticos", status: "ganha", responsavel: "Carol Colicigno", dataApresentacao: m(-2, 12), valorEstimado: 420000, custos: [
+        { descricao: "Horas de criação (equipe)", categoria: "Criação / horas internas", valor: 9000, data: m(-2, 5), fornecedor: "" },
+        { descricao: "Mockups impressos", categoria: "Impressão / materiais", valor: 1800, data: m(-2, 10), fornecedor: "" }] },
+    { id: "cc3", nome: "Concorrência Viva Saúde", cliente: "Viva Saúde", status: "perdida", responsavel: "Bia Santos", dataApresentacao: m(-3, 22), valorEstimado: 600000, custos: [
+        { descricao: "Horas de criação (equipe)", categoria: "Criação / horas internas", valor: 14000, data: m(-3, 10), fornecedor: "" }] },
+  ],
   tarefas: [
     { id: "t1", projetoId: "j1", col: "todo", etiquetas: "UX Design, UX Research", titulo: "Processo de UX completo da primeira versão", responsavel: "Leo Prado", comentarios: 12, anexos: 4, prazo: m(0, 13) },
     { id: "t2", projetoId: "j1", col: "todo", etiquetas: "Wireframe", titulo: "Wireframes das telas principais", responsavel: "Ana Kim", comentarios: 5, anexos: 2, prazo: m(0, 17) },
