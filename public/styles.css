@@ -24,7 +24,10 @@ svg.fill { fill: currentColor; stroke: none; }
 
 /* Rail */
 .rail { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 0; border-right: 1px solid var(--line); }
-.rail__logo { width: 28px; height: 28px; color: #4a3df5; margin-bottom: 16px; stroke-width: 2.2; }
+.rail__logo { display: block; width: 36px; height: 36px; margin-bottom: 16px; border-radius: 50%; }
+.rail__logo img { display: block; width: 36px; height: 36px; }
+.rail__logo:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.login__logo { width: 48px; height: 48px; }
 .rail__btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: #333; }
 .rail__btn:hover { background: var(--muted-surface); }
 .rail__btn.is-active { color: #fff; background: radial-gradient(circle at 30% 30%, #ff8adf, #a24cf5 60%, #5b3df5); box-shadow: 0 6px 18px rgba(162,76,245,.45); }
@@ -141,7 +144,7 @@ svg.fill { fill: currentColor; stroke: none; }
 .login__card .btn-primary { padding: 11px; }
 .login__erro { color: #c62828; font-size: 13px; min-height: 1em; }
 .app.erp-mode { grid-template-columns: 72px 1fr; }
-.app.erp-mode .projects, .app.erp-mode .main { display: none; }
+.app.erp-mode > .projects, .app.erp-mode > .main { display: none; }
 .erp { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .erp[hidden], .erp__tabs[hidden] { display: none; }
 .erp__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 26px 24px 10px; }
@@ -190,7 +193,7 @@ svg.fill { fill: currentColor; stroke: none; }
 .matrix td { text-align: center; }
 .matrix td:first-child { text-align: left; }
 
-.dialog { border: 0; border-radius: 20px; padding: 24px; width: min(560px, calc(100vw - 32px)); }
+.dialog { margin: auto; border: 0; border-radius: 20px; padding: 24px; width: min(560px, calc(100vw - 32px)); }
 .dialog::backdrop { background: rgba(18,18,30,.35); }
 .dialog h2 { font-size: 20px; margin-bottom: 16px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -212,3 +215,9 @@ svg.fill { fill: currentColor; stroke: none; }
 .av--txt { width: 24px; height: 24px; display: grid; place-items: center; font-size: 9px; font-weight: 700; background: var(--pink); color: #8a1f5c; }
 .btn-ghost.no { color: #a61b1b; margin-right: auto; }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+.dialog--wide { width: min(860px, calc(100vw - 32px)); }
+.row--chosen td { background: #f2f5ff; }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.steps code { background: var(--muted-surface); padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+.panel a { color: var(--accent); }

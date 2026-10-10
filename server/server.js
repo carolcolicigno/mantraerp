@@ -6,6 +6,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const seed = require("./seed");
 const { openStore } = require("./db");
+const asaas = require("./asaas");
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC = path.join(__dirname, "..", "public");
@@ -30,6 +31,8 @@ const WRITE = {
   projetos: ["servicos", "vendas"],
   colaboradores: ["pessoas"],
   tarefas: ["projetos", "servicos"],
+  extrato: ["financeiro"],
+  atividades: ["vendas"],
   usuarios: [], // só admin
   config: [], // só admin
 };
@@ -39,7 +42,7 @@ const isAdmin = (u) => u.perfil === "admin";
 const canWrite = (u, col) => isAdmin(u) || (WRITE[col] || []).some((m) => hasModule(u, m));
 const canApprove = (u) => !!PERFIS[u.perfil]?.aprova;
 
-const CONFIG_PADRAO = { id: "geral", regime: "Simples Nacional", aliquota: 11.33, encargos: 68 };
+const CONFIG_PADRAO = { id: "geral", regime: "Simples Nacional", aliquota: 11.33, encargos: 68, servicoMunicipal: "", iss: 5 };
 
 /* ---------- Banco ---------- */
 const store = openStore();
@@ -101,12 +104,136 @@ function init() {
 
 /* ---------- Dados visíveis por usuário ---------- */
 async function dadosPara(u) {
+  await gerarRecorrentes(u);
   const out = {};
   for (const col of COLLECTIONS) out[col] = await listCol(col);
   if (!hasModule(u, "pessoas")) out.colaboradores = out.colaboradores.map(({ id, nome, cargo, area }) => ({ id, nome, cargo, area }));
   out.config = [out.config.find((c) => c.id === "geral") || CONFIG_PADRAO];
   out.historico = hasModule(u, "aprovacoes") ? await store.hist() : [];
+  out.integracoes = { asaas: asaas.configurado(), ambiente: asaas.ambiente() };
   return out;
+}
+
+/* ---------- Cobranças recorrentes de contratos ---------- */
+const addMonths = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); };
+function valorComReajuste(k, data) {
+  const anos = Math.max(0, Math.floor((new Date(data) - new Date(k.inicio)) / (365.25 * 864e5)));
+  return Math.round(Number(k.valorMensal) * Math.pow(1 + (Number(k.reajuste) || 0) / 100, anos) * 100) / 100;
+}
+// Gera, uma vez por mês e contrato, a parcela do mês atual e do próximo em Contas a receber.
+// O id é determinístico (rec-<contrato>-<AAAA-MM>), então nunca há duplicidade.
+let ultimaGeracao = 0;
+async function gerarRecorrentes(u) {
+  if (Date.now() - ultimaGeracao < 5 * 60e3) return;
+  ultimaGeracao = Date.now();
+  const hoje = new Date().toISOString().slice(0, 10);
+  const contratos = await listCol("contratos");
+  const contas = await listCol("contas");
+  const criadas = [];
+  await store.tx(async (s) => {
+    for (const k of contratos) {
+      if (!k.inicio || !k.fim || !(Number(k.valorMensal) > 0)) continue;
+      for (const n of [0, 1]) {
+        const dia = String(Math.min(28, Math.max(1, Number(k.diaVencimento) || 10))).padStart(2, "0");
+        const venc = addMonths(hoje.slice(0, 8) + dia, n);
+        if (venc < k.inicio || venc > k.fim) continue;
+        const id = `rec-${k.id}-${venc.slice(0, 7)}`;
+        if (await s.get("contas", id)) continue;
+        const valor = valorComReajuste(k, venc);
+        // Já existe lançamento do mesmo cliente, mês e valor (ex.: criado à mão)? Não duplica.
+        if (contas.some((c) => c.tipo === "receber" && c.parceiro === k.cliente && c.vencimento.slice(0, 7) === venc.slice(0, 7) && (c.contrato === k.id || Math.abs(c.valor - valor) < 0.01 || Math.abs(c.valor - k.valorMensal) < 0.01))) continue;
+        await s.put("contas", id, { id, tipo: "receber", descricao: `Parcela contrato — ${k.objeto}`, parceiro: k.cliente, categoria: "Fee", valor, vencimento: venc, status: "aberto", conciliado: false, aprovado: true, contrato: k.id });
+        criadas.push(`${k.cliente} ${venc.slice(0, 7)}`);
+      }
+    }
+    if (criadas.length) await log("Sistema", "Cobrança recorrente automática", criadas.join(", "), s);
+  });
+}
+
+/* ---------- Asaas: cobranças e NFS-e ---------- */
+async function integracao(u, acao, body) {
+  if (!asaas.configurado()) throw new HttpError(400, "Integração com o Asaas não configurada (defina ASAAS_API_KEY no projeto da Vercel).");
+  try {
+    if (acao === "cobranca") {
+      if (!canWrite(u, "contas")) throw new HttpError(403, "Seu perfil não pode gerar cobranças");
+      const conta = await getRec("contas", String(body.contaId || ""));
+      if (!conta || conta.tipo !== "receber") throw new HttpError(404, "Conta a receber não encontrada");
+      if (conta.asaas?.id) throw new HttpError(400, "Essa conta já tem cobrança no Asaas");
+      const cliente = (await listCol("clientes")).find((c) => c.nome === conta.parceiro);
+      if (!cliente) throw new HttpError(400, `Cliente "${conta.parceiro}" não está cadastrado`);
+      conta.asaas = await asaas.criarCobranca(conta, cliente);
+      if (!cliente.asaasId) await store.put("clientes", cliente.id, { ...cliente, asaasId: conta.asaas.customer });
+      await store.put("contas", conta.id, conta);
+      const h = await log(u.nome, "Cobrança Asaas", `${conta.parceiro}: ${conta.descricao}`);
+      return { registros: [{ col: "contas", rec: conta }], historico: h };
+    }
+    if (acao === "nfse") {
+      if (!canWrite(u, "notas")) throw new HttpError(403, "Seu perfil não pode emitir notas");
+      const conta = await getRec("contas", String(body.contaId || ""));
+      if (!conta || conta.tipo !== "receber") throw new HttpError(404, "Conta a receber não encontrada");
+      if (conta.nota) throw new HttpError(400, "Essa conta já tem nota");
+      const cliente = (await listCol("clientes")).find((c) => c.nome === conta.parceiro);
+      if (!cliente) throw new HttpError(400, `Cliente "${conta.parceiro}" não está cadastrado`);
+      const cfg = (await getRec("config", "geral")) || CONFIG_PADRAO;
+      const nota = { id: crypto.randomBytes(5).toString("hex"), numero: "", cliente: cliente.nome, valor: conta.valor, emissao: new Date().toISOString().slice(0, 10), status: "processando", contabilidade: false, conta: conta.id, descricao: conta.descricao };
+      const r = await asaas.emitirNfse(nota, cliente, cfg);
+      Object.assign(nota, { asaas: r, status: asaas.NOTA[r.status] || "processando", numero: r.numero || "" });
+      conta.nota = nota.numero || "em emissão";
+      await store.tx(async (s) => { await s.put("notas", nota.id, nota); await s.put("contas", conta.id, conta); });
+      const h = await log(u.nome, "NFS-e solicitada", `${cliente.nome} — ${conta.descricao}`);
+      return { registros: [{ col: "notas", rec: nota }, { col: "contas", rec: conta }], historico: h };
+    }
+    if (acao === "sincronizar") {
+      const col = body.col === "notas" ? "notas" : "contas";
+      if (!canWrite(u, col)) throw new HttpError(403, "Sem permissão");
+      const rec = await getRec(col, String(body.id || ""));
+      if (!rec?.asaas?.id) throw new HttpError(404, "Registro sem vínculo com o Asaas");
+      const registros = col === "contas" ? await atualizarConta(rec, await asaas.consultarCobranca(rec.asaas.id)) : await atualizarNota(rec, await asaas.consultarNota(rec.asaas.id));
+      return { registros };
+    }
+  } catch (e) {
+    if (e instanceof asaas.AsaasError) throw new HttpError(502, e.message);
+    throw e;
+  }
+  throw new HttpError(404, "Ação desconhecida");
+}
+async function atualizarConta(conta, p) {
+  conta.asaas = { ...conta.asaas, ...p };
+  if (asaas.PAGO.includes(p.status)) conta.status = "pago";
+  await store.put("contas", conta.id, conta);
+  return [{ col: "contas", rec: conta }];
+}
+async function atualizarNota(nota, n) {
+  nota.asaas = { ...nota.asaas, ...n };
+  nota.status = asaas.NOTA[n.status] || nota.status;
+  if (n.numero) nota.numero = n.numero;
+  await store.put("notas", nota.id, nota);
+  const out = [{ col: "notas", rec: nota }];
+  const conta = nota.conta && (await getRec("contas", nota.conta));
+  if (conta && n.numero && conta.nota !== n.numero) { conta.nota = n.numero; await store.put("contas", conta.id, conta); out.push({ col: "contas", rec: conta }); }
+  return out;
+}
+// Webhook do Asaas: confirma pagamentos e emissão de notas automaticamente.
+async function webhookAsaas(req, res) {
+  const token = process.env.ASAAS_WEBHOOK_TOKEN;
+  const recebido = String(req.headers["asaas-access-token"] || "");
+  if (!token || recebido.length !== token.length || !crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(token))) throw new HttpError(401, "Token inválido");
+  const ev = await readBody(req);
+  if (ev.payment?.externalReference) {
+    const conta = await getRec("contas", ev.payment.externalReference);
+    if (conta?.asaas?.id === ev.payment.id) {
+      await atualizarConta(conta, { status: ev.payment.status });
+      if (asaas.PAGO.includes(ev.payment.status)) await log("Asaas", "Pagamento recebido", `${conta.parceiro}: ${conta.descricao}`);
+    }
+  }
+  if (ev.invoice?.externalReference) {
+    const nota = await getRec("notas", ev.invoice.externalReference);
+    if (nota?.asaas?.id === ev.invoice.id) {
+      await atualizarNota(nota, { status: ev.invoice.status, numero: ev.invoice.number || "", pdf: ev.invoice.pdfUrl || "", motivo: ev.invoice.statusDescription || "" });
+      await log("Asaas", "NFS-e atualizada", `${nota.cliente}: ${ev.invoice.status}`);
+    }
+  }
+  return send(res, 200, { ok: true });
 }
 
 /* ---------- Gravação em lote ---------- */
@@ -164,6 +291,8 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
           regime: String(data.regime || CONFIG_PADRAO.regime),
           aliquota: Math.min(100, Math.max(0, Number(data.aliquota) || 0)),
           encargos: Math.min(200, Math.max(0, Number(data.encargos) || 0)),
+          servicoMunicipal: String(data.servicoMunicipal || "").slice(0, 200),
+          iss: Math.min(10, Math.max(0, Number(data.iss) || 0)),
         });
       }
       await s.put(col, id, data);
@@ -179,8 +308,8 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
 }
 
 /* ---------- HTTP ---------- */
-const STATIC = { "/": "index.html", "/index.html": "index.html", "/styles.css": "styles.css", "/app.js": "app.js", "/erp.js": "erp.js" }; // servidos de public/
-const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
+const STATIC = { "/": "index.html", "/index.html": "index.html", "/styles.css": "styles.css", "/app.js": "app.js", "/erp.js": "erp.js", "/logo.svg": "logo.svg" }; // servidos de public/
+const MIME = { ".svg": "image/svg+xml", ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
 const tentativas = new Map(); // limite de tentativas de login por IP
 
 function send(res, status, body, headers = {}) {
@@ -219,6 +348,7 @@ async function api(req, res, url) {
   if (!store) throw new HttpError(503, "Banco de dados não configurado. Conecte um banco Postgres ao projeto na Vercel.");
   await init();
   // Proteção CSRF simples: escritas exigem cabeçalho próprio (navegadores não o enviam entre sites sem CORS).
+  if (route === "POST /api/asaas/webhook") return webhookAsaas(req, res);
   if (req.method !== "GET" && req.headers["x-mantra"] !== "1") throw new HttpError(403, "Requisição recusada");
 
   if (route === "POST /api/login") {
@@ -255,6 +385,8 @@ async function api(req, res, url) {
     await log(u.nome, "Senha alterada", u.email);
     return send(res, 200, { ok: true });
   }
+  if (route === "POST /api/integracoes/cobranca" || route === "POST /api/integracoes/nfse" || route === "POST /api/integracoes/sincronizar")
+    return send(res, 200, await integracao(u, route.split("/").pop(), await readBody(req)));
   if (route === "POST /api/reset") {
     if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");
     await store.tx(seedNegocio);

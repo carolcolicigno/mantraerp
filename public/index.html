@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mantra ERP</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg" />
+  <link rel="apple-touch-icon" href="logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -12,9 +14,7 @@
 <body>
   <div class="login" id="login" hidden>
     <form class="login__card" id="loginForm">
-      <svg class="rail__logo" width="36" height="36" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-        <circle cx="10" cy="10" r="6"/><circle cx="18" cy="10" r="6"/><circle cx="10" cy="18" r="6"/><circle cx="18" cy="18" r="6"/>
-      </svg>
+      <img class="login__logo" src="logo.svg" alt="Mantra" width="48" height="48" />
       <h1>Mantra ERP</h1>
       <p class="crumbs">Entre com seu e-mail da agência</p>
       <label>E-mail<input id="loginEmail" name="email" type="email" autocomplete="username" required /></label>
@@ -27,9 +27,7 @@
   <div class="app" hidden>
     <!-- Icon rail -->
     <nav class="rail" aria-label="Main">
-      <svg class="rail__logo" width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" aria-label="Mantra">
-        <circle cx="10" cy="10" r="6"/><circle cx="18" cy="10" r="6"/><circle cx="10" cy="18" r="6"/><circle cx="18" cy="18" r="6"/>
-      </svg>
+      <a href="#" class="rail__logo" id="homeLink" title="Início" aria-label="Mantra — ir para o início"><img src="logo.svg" alt="Mantra" width="36" height="36" /></a>
       <div id="railModules" class="rail__modules"></div>
       <div id="userMenu" class="user-menu"></div>
     </nav>

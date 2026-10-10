@@ -13,7 +13,7 @@ const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const escH = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 /* ---------- Comunicação com o servidor ---------- */
-const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas"];
+const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas", "extrato", "atividades"];
 let db = null;
 let me = null;
 let synced = {};
@@ -56,6 +56,20 @@ function save() {
     .then(() => apiFetch("/api/sync", { changes, ...(lg || {}) }))
     .then((r) => { if (r.historico && hasHist()) { db.historico.unshift(r.historico); if (state2.tab.aprovacoes === "Histórico de alterações" && state2.mod === "aprovacoes") renderView(); } })
     .catch(async (e) => { toast(e.message); await loadData().catch(() => {}); renderView(); });
+}
+const asaasOn = () => !!db.integracoes?.asaas;
+// Chama uma ação do servidor que devolve registros já gravados; aplica-os sem reenviar.
+async function apiAction(url, body) {
+  save(); await syncChain;
+  const r = await apiFetch(url, body);
+  for (const { col, rec } of r.registros || []) {
+    const i = db[col].findIndex((x) => x.id === rec.id);
+    if (i >= 0) db[col][i] = rec; else db[col].push(rec);
+    synced[col].set(rec.id, JSON.stringify(rec));
+  }
+  if (r.historico && hasHist()) db.historico.unshift(r.historico);
+  renderView();
+  return r;
 }
 const hasHist = () => Array.isArray(db.historico) && can("aprovacoes");
 const currentUser = () => me;
@@ -102,7 +116,6 @@ const SCHEMAS = {
     { k: "fornecedor", label: "Fornecedor", type: "select", options: () => ["", ...db.fornecedores.map((f) => f.nome)] },
     { k: "solicitante", label: "Solicitante", type: "select", options: opts("colaboradores") },
     { k: "valor", label: "Valor estimado", type: "money" },
-    { k: "cotacoes", label: "Nº de cotações", type: "number" },
     { k: "status", label: "Status", type: "select", options: ["solicitado", "cotação", "aprovado", "recusado"] },
   ] },
   fornecedores: { singular: "Fornecedor", fields: [
@@ -125,6 +138,7 @@ const SCHEMAS = {
     { k: "valorMensal", label: "Parcela mensal", type: "money" },
     { k: "inicio", label: "Início da vigência", type: "date" },
     { k: "fim", label: "Fim da vigência", type: "date" },
+    { k: "diaVencimento", label: "Dia de vencimento da parcela", type: "number" },
     { k: "reajuste", label: "Reajuste anual (%)", type: "number" },
     { k: "indice", label: "Índice", type: "select", options: ["IPCA", "IGP-M", "INPC", "—"] },
   ] },
@@ -143,6 +157,15 @@ const SCHEMAS = {
     { k: "area", label: "Área", type: "select", options: ["Diretoria", "Atendimento", "Criação", "Mídia", "Financeiro", "Tecnologia"] },
     { k: "salario", label: "Salário", type: "money" }, { k: "beneficios", label: "Benefícios", type: "money" },
     { k: "admissao", label: "Admissão", type: "date" },
+  ] },
+  atividades: { singular: "Follow-up", fields: [
+    { k: "cliente", label: "Cliente", type: "select", options: opts("clientes") },
+    { k: "proposta", label: "Proposta", type: "select", options: () => ["", ...db.propostas.map((v) => v.titulo)] },
+    { k: "tipo", label: "Tipo", type: "select", options: ["Ligação", "Reunião", "E-mail", "WhatsApp", "Visita"] },
+    { k: "data", label: "Data", type: "date" },
+    { k: "responsavel", label: "Responsável", type: "select", options: opts("colaboradores") },
+    { k: "descricao", label: "O que fazer", full: true },
+    { k: "concluida", label: "Concluído", type: "bool" },
   ] },
   tarefas: { singular: "Tarefa", fields: [
     { k: "titulo", label: "Tarefa", full: true },
@@ -222,7 +245,7 @@ const labelOf = (r) => r.descricao || r.nome || r.titulo || r.item || r.objeto |
 const PILL = {
   pago: "green", emitida: "green", aprovado: "green", aprovada: "green", pedido: "blue", vigente: "green", ativo: "green",
   aberto: "yellow", "cotação": "yellow", solicitado: "purple", enviada: "blue", rascunho: "", "a vencer": "yellow",
-  atrasado: "red", conciliado: "green", pendente: "yellow", "previsão": "blue", recusado: "red", perdida: "red", cancelada: "red", encerrado: "", "aguardando aprovação": "purple",
+  atrasado: "red", conciliado: "green", processando: "yellow", erro: "red", hoje: "blue", agendado: "", "concluído": "green", "sem correspondência": "yellow", ignorado: "", pendente: "yellow", "previsão": "blue", recusado: "red", perdida: "red", cancelada: "red", encerrado: "", "aguardando aprovação": "purple",
 };
 const pill = (s) => `<span class="pill pill--${PILL[s] ?? ""}">${escH(s)}</span>`;
 const kpi = (label, value, hint = "", cls = "") => `<div class="kpi"><div class="kpi__label">${label}</div><div class="kpi__value ${cls}">${value}</div>${hint ? `<div class="kpi__hint">${hint}</div>` : ""}</div>`;
@@ -293,9 +316,20 @@ function bars(meses) {
 
 /* ---------- Ações de negócio ---------- */
 function marcarPago(c) { c.status = "pago"; log(c.tipo === "receber" ? "Recebimento" : "Pagamento", `${c.descricao} — ${BRL(c.valor)}`); toast("Baixa registrada"); render(); }
-function cobrar(c) { log("Cobrança enviada", `${c.parceiro}: ${c.descricao} — ${BRL(c.valor)}`); toast(`Cobrança enviada para ${c.parceiro}`); render(); }
+async function cobrar(c) {
+  if (!asaasOn()) { log("Cobrança registrada", `${c.parceiro}: ${c.descricao} — ${BRL(c.valor)}`); toast("Cobrança registrada (Asaas não configurado)"); return render(); }
+  try { await apiAction("/api/integracoes/cobranca", { contaId: c.id }); toast("Cobrança criada no Asaas"); } catch (e) { toast(e.message); }
+}
+async function sincronizar(col, r) {
+  try { await apiAction("/api/integracoes/sincronizar", { col, id: r.id }); toast("Status atualizado"); } catch (e) { toast(e.message); }
+}
+function copiar(texto) { navigator.clipboard?.writeText(texto).then(() => toast("Copiado"), () => prompt("Copie:", texto)); }
 function conciliar(c) { c.conciliado = !c.conciliado; log(c.conciliado ? "Conciliação" : "Conciliação desfeita", `${c.descricao} — ${BRL(c.valor)}`); render(); }
-function emitirNota(c) {
+async function emitirNota(c) {
+  if (asaasOn()) {
+    try { await apiAction("/api/integracoes/nfse", { contaId: c.id }); toast("NFS-e enviada para emissão"); } catch (e) { toast(e.message); }
+    return;
+  }
   const ultimo = Math.max(0, ...db.notas.map((n) => Number(n.numero) || 0));
   const numero = String(ultimo + 1).padStart(6, "0");
   db.notas.push({ id: uid(), numero, cliente: c.parceiro, valor: c.valor, emissao: TODAY, status: "emitida", contabilidade: false, conta: c.id });
@@ -308,10 +342,11 @@ function enviarContabilidade(list) {
 }
 function gerarParcela(k) {
   const info = contratoInfo(k);
-  const venc = addMonths(TODAY.slice(0, 8) + "10", 1);
-  const jaExiste = db.contas.some((c) => c.contrato === k.id && monthKey(c.vencimento) === monthKey(venc));
-  if (jaExiste) return toast("Parcela do próximo mês já gerada");
-  db.contas.push({ id: uid(), tipo: "receber", descricao: `Parcela contrato — ${k.objeto}`, parceiro: k.cliente, categoria: "Fee", valor: Math.round(info.valorAtual), vencimento: venc, status: "aberto", conciliado: false, aprovado: true, contrato: k.id });
+  const dia = String(Math.min(28, Math.max(1, Number(k.diaVencimento) || 10))).padStart(2, "0");
+  const venc = addMonths(TODAY.slice(0, 8) + dia, 1);
+  const id = `rec-${k.id}-${monthKey(venc)}`;
+  if (db.contas.some((c) => c.id === id || (c.contrato === k.id && monthKey(c.vencimento) === monthKey(venc)))) return toast("Parcela do próximo mês já gerada");
+  db.contas.push({ id, tipo: "receber", descricao: `Parcela contrato — ${k.objeto}`, parceiro: k.cliente, categoria: "Fee", valor: Math.round(info.valorAtual), vencimento: venc, status: "aberto", conciliado: false, aprovado: true, contrato: k.id });
   log("Cobrança recorrente", `${k.cliente}: parcela de ${BRL(info.valorAtual)} para ${fmtDate(venc)}`); toast("Parcela gerada em Contas a receber"); render();
 }
 function decidirCompra(p, ok) {
@@ -338,6 +373,65 @@ function exportarCSV(nome, header, rows) {
   a.download = nome; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   log("Exportação", nome);
 }
+
+/* ----- Cotações lado a lado ----- */
+function abrirCotacoes(p) {
+  p.cotacoesLista ||= [];
+  let dlg = document.getElementById("cotDialog");
+  if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "cotDialog"; dlg.className = "dialog dialog--wide"; document.body.appendChild(dlg); }
+  const draw = () => {
+    const l = p.cotacoesLista;
+    const menor = l.length ? Math.min(...l.map((c) => c.valor)) : null;
+    const podeEditar = !["aprovado", "recusado"].includes(p.status);
+    dlg.innerHTML = `<h2>Cotações — ${escH(p.item)}</h2>
+      ${l.length ? `<table class="table"><thead><tr><th>Fornecedor</th><th class="num">Valor</th><th class="num">Prazo (dias)</th><th>Observação</th><th></th></tr></thead><tbody>
+        ${l.map((c, i) => `<tr class="${c.escolhida ? "row--chosen" : ""}"><td>${escH(c.fornecedor)}${c.valor === menor ? ` <span class="pill pill--green">menor preço</span>` : ""}${c.escolhida ? ` <span class="pill pill--blue">escolhida</span>` : ""}</td>
+          <td class="num">${BRL(c.valor)}</td><td class="num">${c.prazo ?? "—"}</td><td>${escH(c.obs || "")}</td>
+          <td><div class="row-actions">${podeEditar ? `<button class="ok" data-pick="${i}">Escolher</button><button class="no" data-del="${i}">Remover</button>` : ""}</div></td></tr>`).join("")}
+      </tbody></table>` : `<p class="empty">Nenhuma cotação ainda.</p>`}
+      ${podeEditar ? `<form class="form-grid" id="cotForm" style="margin-top:16px">
+        <label>Fornecedor<input name="fornecedor" list="cotForn" required /></label>
+        <datalist id="cotForn">${db.fornecedores.map((f) => `<option value="${escH(f.nome)}">`).join("")}</datalist>
+        <label>Valor<input name="valor" type="number" step="0.01" min="0" required /></label>
+        <label>Prazo de entrega (dias)<input name="prazo" type="number" min="0" /></label>
+        <label>Observação<input name="obs" /></label>
+        <div class="dialog__actions full" style="grid-column:1/-1;margin-top:0"><button class="btn-primary" type="submit">Adicionar cotação</button></div></form>` : ""}
+      <div class="dialog__actions"><button class="btn-ghost" data-close>Fechar</button></div>`;
+  };
+  dlg.onclick = (e) => {
+    if (e.target.closest("[data-close]")) { dlg.close(); return; }
+    const pick = e.target.closest("[data-pick]"), del = e.target.closest("[data-del]");
+    if (pick) {
+      const c = p.cotacoesLista[Number(pick.dataset.pick)];
+      p.cotacoesLista.forEach((x) => (x.escolhida = x === c));
+      p.fornecedor = c.fornecedor; p.valor = c.valor;
+      log("Cotação escolhida", `${p.item}: ${c.fornecedor} — ${BRL(c.valor)}`); render(); draw();
+    }
+    if (del) { p.cotacoesLista.splice(Number(del.dataset.del), 1); render(); draw(); }
+  };
+  dlg.onsubmit = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    p.cotacoesLista.push({ fornecedor: String(fd.get("fornecedor")).trim(), valor: Number(fd.get("valor")) || 0, prazo: fd.get("prazo") === "" ? null : Number(fd.get("prazo")), obs: String(fd.get("obs") || "").trim() });
+    if (p.status === "solicitado") p.status = "cotação";
+    log("Cotação registrada", `${p.item}: ${fd.get("fornecedor")} — ${BRL(fd.get("valor"))}`); render(); draw();
+  };
+  draw(); dlg.showModal();
+}
+
+/* ----- Follow-ups comerciais ----- */
+const followStatus = (a) => (a.concluida ? "concluído" : a.data < TODAY ? "atrasado" : a.data === TODAY ? "hoje" : "agendado");
+function renderFollowups() {
+  const rows = [...db.atividades].sort((a, b) => Number(a.concluida) - Number(b.concluida) || a.data.localeCompare(b.data));
+  const abertos = db.atividades.filter((a) => !a.concluida);
+  const atras = abertos.filter((a) => a.data < TODAY);
+  return `<div class="kpis">${kpi("Follow-ups atrasados", atras.length, "", atras.length ? "neg" : "pos")}${kpi("Para hoje", abertos.filter((a) => a.data === TODAY).length)}${kpi("Próximos 7 dias", abertos.filter((a) => a.data > TODAY && a.data <= addDays(TODAY, 7)).length)}</div>` +
+    table({ title: "Agenda de follow-ups", rows, addCol: "atividades", addDefaults: { data: TODAY, tipo: "Ligação", responsavel: currentUser().nome, concluida: false },
+      cols: [{ label: "Data", get: date("data") }, { label: "Cliente", get: txt("cliente") }, { label: "Proposta", get: (r) => escH(r.proposta || "—") }, { label: "Tipo", get: (r) => pill(r.tipo) },
+        { label: "O que fazer", get: txt("descricao") }, { label: "Responsável", get: txt("responsavel") }, { label: "Status", get: (r) => pill(followStatus(r)) }],
+      actions: (r) => [!r.concluida && { label: "Concluir", cls: "ok", fn: () => { r.concluida = true; log("Follow-up concluído", `${r.cliente}: ${r.descricao}`); render(); } }, ...editDel("atividades")(r)] });
+}
+const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
 /* ---------- Módulos ---------- */
 const ICON = {
@@ -366,10 +460,9 @@ const MODULES = {
   faturamento: { label: "Faturamento e fiscal", render: renderFaturamento },
   compras: { label: "Compras e fornecedores", tabs: {
     "Solicitações e cotações": () => table({ title: "Solicitações de compra", rows: db.compras, addCol: "compras", addDefaults: { status: "solicitado", solicitante: currentUser().nome, cotacoes: 0 },
-      cols: [{ label: "Item", get: txt("item") }, { label: "Fornecedor", get: (r) => escH(r.fornecedor || "—") }, { label: "Solicitante", get: txt("solicitante") }, { label: "Cotações", get: (r) => r.cotacoes, num: true }, { label: "Valor", get: money("valor"), num: true }, { label: "Status", get: (r) => pill(r.status) }],
+      cols: [{ label: "Item", get: txt("item") }, { label: "Fornecedor", get: (r) => escH(r.fornecedor || "—") }, { label: "Solicitante", get: txt("solicitante") }, { label: "Cotações", get: (r) => (r.cotacoesLista || []).length, num: true }, { label: "Melhor preço", num: true, get: (r) => { const l = r.cotacoesLista || []; return l.length ? BRL(Math.min(...l.map((c) => c.valor))) : "—"; } }, { label: "Valor", get: money("valor"), num: true }, { label: "Status", get: (r) => pill(r.status) }],
       actions: (r) => [
-        r.status === "solicitado" && { label: "Iniciar cotação", cls: "main", fn: () => { r.status = "cotação"; log("Cotação iniciada", r.item); render(); } },
-        r.status === "cotação" && { label: "+1 cotação", fn: () => { r.cotacoes++; log("Cotação registrada", `${r.item} (${r.cotacoes})`); render(); } },
+        { label: `Cotações (${(r.cotacoesLista || []).length})`, cls: "main", fn: () => abrirCotacoes(r) },
         ...editDel("compras")(r)] }),
     Fornecedores: () => table({ title: "Fornecedores", rows: db.fornecedores, addCol: "fornecedores",
       cols: [{ label: "Nome", get: txt("nome") }, { label: "CNPJ", get: txt("cnpj") }, { label: "Contato", get: txt("contato") }, { label: "Categoria", get: (r) => pill(r.categoria) },
@@ -378,6 +471,7 @@ const MODULES = {
   } },
   vendas: { label: "Vendas e clientes", tabs: {
     "Propostas e pedidos": renderPropostas,
+    "Follow-ups": renderFollowups,
     Clientes: () => table({ title: "Clientes", rows: db.clientes, addCol: "clientes",
       cols: [{ label: "Nome", get: txt("nome") }, { label: "CNPJ", get: txt("cnpj") }, { label: "Contato", get: txt("contato") }, { label: "Segmento", get: (r) => pill(r.segmento) },
         { label: "Receita (12m)", num: true, get: (r) => BRL(sum(receber().filter((c) => c.parceiro === r.nome && c.status === "pago"), (c) => c.valor)) },
@@ -409,11 +503,14 @@ function contasTable(tipo) {
   </div>` + table({ title: tipo === "receber" ? "Contas a receber" : "Contas a pagar", rows, addCol: "contas", addDefaults: { tipo, status: "aberto", vencimento: TODAY },
     cols: [{ label: "Vencimento", get: date("vencimento") }, { label: "Descrição", get: txt("descricao") }, { label: tipo === "receber" ? "Cliente" : "Fornecedor", get: txt("parceiro") },
       { label: "Categoria", get: txt("categoria") }, { label: "Valor", get: money("valor"), num: true }, { label: "Status", get: (r) => pill(contaStatus(r)) },
-      ...(tipo === "receber" ? [{ label: "NF", get: (r) => (r.nota ? escH(r.nota) : "—") }] : [])],
+      ...(tipo === "receber" ? [{ label: "NF", get: (r) => (r.nota ? escH(r.nota) : "—") },
+        { label: "Cobrança", get: (r) => (r.asaas?.url ? `<a href="${escH(r.asaas.url)}" target="_blank" rel="noopener">abrir</a>` : "—") }] : [])],
     actions: (r) => [
       r.status !== "pago" && r.aprovado && { label: tipo === "receber" ? "Receber" : "Pagar", cls: "ok", fn: () => marcarPago(r) },
-      tipo === "receber" && contaStatus(r) === "atrasado" && { label: "Cobrar", cls: "main", fn: () => cobrar(r) },
-      tipo === "receber" && !r.nota && { label: "Emitir NF", fn: () => emitirNota(r) },
+      tipo === "receber" && r.status !== "pago" && !r.asaas && (asaasOn() || contaStatus(r) === "atrasado") && { label: asaasOn() ? "Gerar boleto/Pix" : "Cobrar", cls: "main", fn: () => cobrar(r) },
+      r.asaas?.pix && r.status !== "pago" && { label: "Copiar Pix", fn: () => copiar(r.asaas.pix) },
+      r.asaas?.id && r.status !== "pago" && { label: "Atualizar", fn: () => sincronizar("contas", r) },
+      tipo === "receber" && !r.nota && { label: asaasOn() ? "Emitir NFS-e" : "Registrar NF", fn: () => emitirNota(r) },
       ...editDel("contas")(r)] });
 }
 
@@ -430,6 +527,7 @@ function renderOverview() {
     ${kpi("Despesas previstas no mês", BRL(atual.sai), monthLabel(atual.key))}
     ${kpi("Inadimplência", BRL(sum(inad, (c) => c.valor)), `${inad.length} cobranças vencidas`, inad.length ? "neg" : "")}
     ${kpi("Aprovações pendentes", pend, "compras e despesas")}
+    ${kpi("Follow-ups atrasados", db.atividades.filter((a) => !a.concluida && a.data < TODAY).length, "Vendas e clientes", db.atividades.some((a) => !a.concluida && a.data < TODAY) ? "neg" : "")}
     ${kpi("Contratos vigentes", db.contratos.filter((k) => contratoInfo(k).status === "vigente").length, `${vencendo.length} vencem em até 3 meses`)}
   </div>
   <div class="grid-2">
@@ -448,15 +546,115 @@ function renderFluxo() {
         { label: "Saldo do mês", num: true, get: (r) => `<span class="${r.saldo >= 0 ? "pos" : "neg"}">${BRL(r.saldo)}</span>` }, { label: "Acumulado", num: true, get: (r) => BRL(r.acc) }] });
 }
 
+/* ----- Extrato bancário: importação (OFX/CSV) e conciliação automática ----- */
+function parseValorBR(v) {
+  let t = String(v).trim().replace(/[R$\s]/g, "");
+  if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
+  else t = t.replace(/,/g, "");
+  return Number(t);
+}
+function parseData(v) {
+  const t = String(v).trim();
+  let m;
+  if ((m = t.match(/^(\d{4})(\d{2})(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
+  if ((m = t.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
+  if ((m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/))) return `${m[3]}-${m[2]}-${m[1]}`;
+  return null;
+}
+function parseOFX(txt) {
+  const tag = (bloco, nome) => (bloco.match(new RegExp(`<${nome}>([^<\r\n]*)`, "i")) || [])[1]?.trim() || "";
+  return txt.split(/<STMTTRN>/i).slice(1).map((b) => ({
+    fitid: tag(b, "FITID"), data: parseData(tag(b, "DTPOSTED")), valor: parseValorBR(tag(b, "TRNAMT").replace(",", ".")),
+    descricao: tag(b, "MEMO") || tag(b, "NAME") || "Movimento",
+  })).filter((l) => l.data && Number.isFinite(l.valor) && l.valor !== 0);
+}
+function parseCSV(txt) {
+  const linhas = txt.split(/\r?\n/).filter((l) => l.trim());
+  const sep = (linhas[0].match(/;/g) || []).length >= (linhas[0].match(/,/g) || []).length ? ";" : ",";
+  const out = [];
+  for (const linha of linhas) {
+    const cols = linha.split(sep).map((c) => c.replace(/^"|"$/g, "").trim());
+    const iData = cols.findIndex((c) => parseData(c));
+    if (iData < 0) continue; // cabeçalho ou linha sem data
+    const nums = cols.map((c, i) => ({ i, v: /\d/.test(c) && i !== iData && /^[-+R$\s\d.,]+$/.test(c) ? parseValorBR(c) : NaN })).filter((x) => Number.isFinite(x.v));
+    if (!nums.length) continue;
+    const valor = nums[0].v; // primeira coluna numérica após a data = valor (saldo costuma vir depois)
+    const descricao = cols.filter((c, i) => i !== iData && !nums.some((n) => n.i === i)).sort((x, y) => y.length - x.length)[0] || "Movimento";
+    if (valor) out.push({ fitid: "", data: parseData(cols[iData]), valor, descricao });
+  }
+  return out;
+}
+const diasEntre = (a, b) => Math.abs(new Date(a) - new Date(b)) / 864e5;
+// Procura um lançamento com o mesmo valor e sentido, vencimento até 7 dias de distância, ainda não conciliado.
+function melhorLancamento(linha) {
+  const tipo = linha.valor > 0 ? "receber" : "pagar";
+  const usados = new Set(db.extrato.map((x) => x.contaId).filter(Boolean));
+  return db.contas
+    .filter((c) => c.tipo === tipo && !c.conciliado && !usados.has(c.id) && Math.abs(c.valor - Math.abs(linha.valor)) < 0.01 && diasEntre(c.vencimento, linha.data) <= 7 && (c.aprovado || c.status === "pago"))
+    .sort((x, y) => diasEntre(x.vencimento, linha.data) - diasEntre(y.vencimento, linha.data))[0];
+}
+function vincular(linha, conta) {
+  linha.contaId = conta.id; linha.status = "conciliado";
+  conta.conciliado = true; conta.status = "pago"; conta.extratoId = linha.id;
+}
+async function importarExtrato(file) {
+  const txt = await file.text();
+  const linhas = /<OFX>|<STMTTRN>/i.test(txt) ? parseOFX(txt) : parseCSV(txt);
+  if (!linhas.length) return toast("Nenhum movimento encontrado no arquivo");
+  let novos = 0, conciliados = 0;
+  for (const l of linhas) {
+    const id = "x" + (l.fitid ? l.fitid : `${l.data}|${l.valor}|${l.descricao}`).split("").reduce((h, ch) => (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0, 7).toString(36);
+    if (db.extrato.some((x) => x.id === id)) continue;
+    const linha = { id, data: l.data, valor: l.valor, descricao: l.descricao.slice(0, 200), status: "sem correspondência", arquivo: file.name };
+    db.extrato.push(linha); novos++;
+    const conta = melhorLancamento(linha);
+    if (conta) { vincular(linha, conta); conciliados++; }
+  }
+  log("Extrato importado", `${file.name}: ${novos} movimentos novos, ${conciliados} conciliados automaticamente`);
+  toast(`${novos} movimentos importados · ${conciliados} conciliados automaticamente`);
+  render();
+}
+
 function renderConciliacao() {
+  const ext = [...db.extrato].sort((a, b) => b.data.localeCompare(a.data));
+  const semPar = ext.filter((x) => x.status === "sem correspondência");
   const pagos = db.contas.filter((c) => c.status === "pago").sort((a, b) => b.vencimento.localeCompare(a.vencimento));
   const pend = pagos.filter((c) => !c.conciliado);
-  return `<div class="kpis">${kpi("Movimentos baixados", pagos.length)}${kpi("Conciliados", pagos.length - pend.length, "", "pos")}${kpi("Pendentes de conciliação", pend.length, BRL(sum(pend, (c) => c.valor)), pend.length ? "neg" : "")}</div>` +
-    table({ title: "Movimentos para conciliar com o extrato", rows: pagos,
+  const upload = reg(() => document.getElementById("extratoFile").click());
+  return `<div class="kpis">${kpi("Movimentos no extrato", ext.length)}${kpi("Conciliados automaticamente", ext.filter((x) => x.status === "conciliado").length, "", "pos")}${kpi("Extrato sem correspondência", semPar.length, BRL(sum(semPar, (x) => Math.abs(x.valor))), semPar.length ? "neg" : "")}${kpi("Lançamentos pagos sem extrato", pend.length, BRL(sum(pend, (c) => c.valor)))}</div>
+    <div class="panel"><div class="panel__head"><h3 class="panel__title">Importar extrato bancário</h3>
+      <button class="btn-primary" data-act="${upload}">Importar OFX ou CSV</button></div>
+      <input type="file" id="extratoFile" accept=".ofx,.csv,.txt" hidden />
+      <p class="empty">Exporte o extrato no internet banking em <b>OFX</b> (recomendado) ou <b>CSV</b> com data, descrição e valor. Cada movimento é comparado com Contas a pagar e a receber pelo valor e pela data (até 7 dias de diferença); quando bate, o lançamento é baixado e conciliado. Importar o mesmo arquivo duas vezes não duplica movimentos.</p></div>` +
+    table({ title: "Movimentos do extrato", rows: ext,
+      cols: [{ label: "Data", get: date("data") }, { label: "Descrição", get: txt("descricao") },
+        { label: "Valor", num: true, get: (r) => `<span class="${r.valor > 0 ? "pos" : "neg"}">${r.valor > 0 ? "+" : "−"} ${BRL(Math.abs(r.valor))}</span>` },
+        { label: "Situação", get: (r) => pill(r.status) },
+        { label: "Lançamento", get: (r) => { const c = db.contas.find((x) => x.id === r.contaId); return c ? escH(`${c.descricao} · ${c.parceiro}`) : "—"; } }],
+      actions: (r) => r.status === "conciliado"
+        ? [{ label: "Desvincular", fn: () => { const c = db.contas.find((x) => x.id === r.contaId); if (c) { c.conciliado = false; delete c.extratoId; } r.contaId = ""; r.status = "sem correspondência"; log("Conciliação desfeita", r.descricao); render(); } }]
+        : [
+          r.status === "sem correspondência" && { label: "Vincular…", cls: "main", fn: () => escolherLancamento(r) },
+          r.status === "sem correspondência" && { label: "Criar lançamento", fn: () => {
+            const c = { id: uid(), tipo: r.valor > 0 ? "receber" : "pagar", descricao: r.descricao, parceiro: "Extrato bancário", categoria: "Outros", valor: Math.abs(r.valor), vencimento: r.data, status: "pago", conciliado: true, aprovado: true, extratoId: r.id };
+            db.contas.push(c); r.contaId = c.id; r.status = "conciliado"; log("Lançamento criado do extrato", `${r.descricao} — ${BRL(c.valor)}`); render(); } },
+          { label: r.status === "ignorado" ? "Reativar" : "Ignorar", fn: () => { r.status = r.status === "ignorado" ? "sem correspondência" : "ignorado"; render(); } },
+        ] }) +
+    table({ title: "Lançamentos pagos ainda sem extrato", rows: pend,
       cols: [{ label: "Data", get: date("vencimento") }, { label: "Descrição", get: txt("descricao") }, { label: "Parceiro", get: txt("parceiro") },
-        { label: "Valor", num: true, get: (r) => `<span class="${r.tipo === "receber" ? "pos" : "neg"}">${r.tipo === "receber" ? "+" : "−"} ${BRL(r.valor)}</span>` },
-        { label: "Extrato", get: (r) => pill(r.conciliado ? "conciliado" : "pendente") }],
-      actions: (r) => [{ label: r.conciliado ? "Desfazer" : "Conciliar", cls: r.conciliado ? "" : "ok", fn: () => conciliar(r) }] });
+        { label: "Valor", num: true, get: (r) => `<span class="${r.tipo === "receber" ? "pos" : "neg"}">${r.tipo === "receber" ? "+" : "−"} ${BRL(r.valor)}</span>` }],
+      actions: (r) => [{ label: "Conciliar manualmente", cls: "ok", fn: () => conciliar(r) }] });
+}
+function escolherLancamento(linha) {
+  const tipo = linha.valor > 0 ? "receber" : "pagar";
+  const opcoes = db.contas.filter((c) => c.tipo === tipo && !c.conciliado).sort((a, b) => diasEntre(a.vencimento, linha.data) - diasEntre(b.vencimento, linha.data)).slice(0, 15);
+  if (!opcoes.length) return toast("Nenhum lançamento em aberto desse tipo");
+  const lista = opcoes.map((c, i) => `${i + 1}. ${fmtDate(c.vencimento)} · ${c.descricao} · ${c.parceiro} · ${BRL(c.valor)}`).join("\n");
+  const n = Number(prompt(`Vincular "${linha.descricao}" (${BRL(Math.abs(linha.valor))}) a qual lançamento?\n\n${lista}\n\nDigite o número:`));
+  const c = opcoes[n - 1];
+  if (!c) return;
+  vincular(linha, c);
+  log("Conciliação manual", `${linha.descricao} → ${c.descricao}`); render();
 }
 
 function renderFaturamento() {
@@ -464,7 +662,8 @@ function renderFaturamento() {
   const mes = emitidas.filter((n) => monthKey(n.emissao) === monthKey(TODAY));
   const pendCont = emitidas.filter((n) => !n.contabilidade);
   const semNota = receber().filter((c) => !c.nota && c.status !== "pago");
-  return `<div class="kpis">
+  const aviso = asaasOn() ? "" : `<div class="panel empty">⚠️ Integração com o Asaas não configurada: as notas ficam só registradas no sistema, sem emissão na prefeitura. Veja <b>Aprovações e acessos → Configurações</b>.</div>`;
+  return aviso + `<div class="kpis">
     ${kpi("Faturado no mês", BRL(sum(mes, (n) => n.valor)), `${mes.length} notas`)}
     ${kpi("Faturado (total)", BRL(sum(emitidas, (n) => n.valor)), `${emitidas.length} notas emitidas`)}
     ${kpi("Impostos estimados", BRL(sum(emitidas, (n) => n.valor) * (cfg().aliquota / 100)), `${escH(cfg().regime)} · ${String(cfg().aliquota).replace(".", ",")}%`)}
@@ -473,11 +672,13 @@ function renderFaturamento() {
   table({ title: "Notas fiscais de serviço", rows: [...db.notas].sort((a, b) => b.numero.localeCompare(a.numero)), addCol: "notas", addDefaults: { emissao: TODAY, status: "emitida" },
     extra: `<button class="btn-ghost" data-act="${reg(() => enviarContabilidade(db.notas))}">Enviar à contabilidade</button>`,
     cols: [{ label: "Número", get: txt("numero") }, { label: "Cliente", get: txt("cliente") }, { label: "Emissão", get: date("emissao") }, { label: "Valor", get: money("valor"), num: true },
-      { label: "Status", get: (r) => pill(r.status) }, { label: "Contabilidade", get: (r) => (r.contabilidade ? pill("enviada") : pill("pendente")) }],
-    actions: (r) => [r.status === "emitida" && { label: "Cancelar", cls: "no", fn: () => { r.status = "cancelada"; log("NF cancelada", `NF ${r.numero}`); render(); } }, { label: "Editar", fn: () => openForm("notas", r) }] }) +
+      { label: "Status", get: (r) => pill(r.status) + (r.asaas?.motivo && r.status === "erro" ? ` <span class="neg" title="${escH(r.asaas.motivo)}">ⓘ</span>` : "") },
+      { label: "PDF", get: (r) => (r.asaas?.pdf ? `<a href="${escH(r.asaas.pdf)}" target="_blank" rel="noopener">abrir</a>` : "—") },
+      { label: "Contabilidade", get: (r) => (r.contabilidade ? pill("enviada") : pill("pendente")) }],
+    actions: (r) => [r.asaas?.id && r.status !== "emitida" && { label: "Atualizar", fn: () => sincronizar("notas", r) }, r.status === "emitida" && !r.asaas && { label: "Cancelar", cls: "no", fn: () => { r.status = "cancelada"; log("NF cancelada", `NF ${r.numero}`); render(); } }, { label: "Editar", fn: () => openForm("notas", r) }] }) +
   table({ title: "Recebíveis sem nota emitida", rows: semNota, filter: false,
     cols: [{ label: "Vencimento", get: date("vencimento") }, { label: "Cliente", get: txt("parceiro") }, { label: "Descrição", get: txt("descricao") }, { label: "Valor", get: money("valor"), num: true }],
-    actions: (r) => [{ label: "Emitir NF", cls: "main", fn: () => emitirNota(r) }] });
+    actions: (r) => [{ label: asaasOn() ? "Emitir NFS-e" : "Registrar NF", cls: "main", fn: () => emitirNota(r) }] });
 }
 
 function renderPropostas() {
@@ -495,6 +696,7 @@ function renderPropostas() {
       r.status === "enviada" && { label: "Aprovada", cls: "ok", fn: () => { r.status = "aprovada"; log("Proposta aprovada", `${r.cliente}: ${r.titulo}`); render(); } },
       r.status === "enviada" && { label: "Perdida", cls: "no", fn: () => { r.status = "perdida"; log("Proposta perdida", `${r.cliente}: ${r.titulo}`); render(); } },
       r.status === "aprovada" && { label: "Gerar pedido", cls: "main", fn: () => converterProposta(r) },
+      ["rascunho", "enviada"].includes(r.status) && { label: "Follow-up", fn: () => openForm("atividades", null, { cliente: r.cliente, proposta: r.titulo, data: addDays(TODAY, 3), tipo: "Ligação", responsavel: currentUser().nome, concluida: false }) },
       ...editDel("propostas")(r)] });
 }
 
@@ -509,8 +711,9 @@ function renderContratos() {
   </div>` + table({ title: "Contratos", rows: infos, addCol: "contratos", addDefaults: { inicio: TODAY, fim: addMonths(TODAY, 12), reajuste: 0, indice: "IPCA" },
     cols: [{ label: "Cliente", get: txt("cliente") }, { label: "Objeto", get: txt("objeto") }, { label: "Vigência", get: (r) => `${fmtDate(r.inicio)} → ${fmtDate(r.fim)}` },
       { label: "Parcela atual", num: true, get: (r) => BRL(r.valorAtual) }, { label: "Reajuste", get: (r) => (r.reajuste ? `${r.reajuste}% ${escH(r.indice)} · ${fmtDate(r.proxReajuste)}` : "—") },
-      { label: "Parcelas", get: (r) => `${r.restantes}/${r.total} restantes` }, { label: "Status", get: (r) => pill(r.status) }],
-    actions: (r) => [r.status === "vigente" && { label: "Gerar cobrança", cls: "main", fn: () => gerarParcela(db.contratos.find((k) => k.id === r.id)) },
+      { label: "Parcelas", get: (r) => `${r.restantes}/${r.total} restantes` },
+      { label: "Cobrança automática", get: (r) => (r.status === "vigente" ? `todo dia ${Math.min(28, Math.max(1, Number(r.diaVencimento) || 10))}` : "—") }, { label: "Status", get: (r) => pill(r.status) }],
+    actions: (r) => [r.status === "vigente" && { label: "Gerar próxima agora", fn: () => gerarParcela(db.contratos.find((k) => k.id === r.id)) },
       ...editDel("contratos")(db.contratos.find((k) => k.id === r.id))] });
 }
 
@@ -609,7 +812,9 @@ function renderConfig() {
     const regime = document.getElementById("cfgRegime").value;
     const aliquota = Number(document.getElementById("cfgAliquota").value) || 0;
     const encargos = Number(document.getElementById("cfgEncargos").value) || 0;
-    db.config = [{ ...c, regime, aliquota, encargos }];
+    const servicoMunicipal = document.getElementById("cfgServico").value.trim();
+    const iss = Number(document.getElementById("cfgIss").value) || 0;
+    db.config = [{ ...c, regime, aliquota, encargos, servicoMunicipal, iss }];
     log("Configuração", `${regime}: impostos ${aliquota}% · encargos ${encargos}%`); toast("Configurações salvas"); render();
   });
   const sugerir = reg(() => { const r = document.getElementById("cfgRegime").value; document.getElementById("cfgAliquota").value = REGIMES[r]; });
@@ -618,9 +823,18 @@ function renderConfig() {
       <label>Regime tributário<select id="cfgRegime">${Object.keys(REGIMES).map((r) => `<option ${r === c.regime ? "selected" : ""}>${r}</option>`).join("")}</select></label>
       <label>Alíquota total sobre faturamento (%)<input id="cfgAliquota" type="number" step="0.01" min="0" max="100" value="${c.aliquota}" /></label>
       <label>Encargos sobre salários (%)<input id="cfgEncargos" type="number" step="0.1" min="0" max="200" value="${c.encargos}" /></label>
+      <label>Serviço municipal da NFS-e (como aparece na prefeitura)<input id="cfgServico" value="${escH(c.servicoMunicipal || "")}" placeholder="ex.: 17.06 - Propaganda e publicidade" /></label>
+      <label>Alíquota de ISS (%)<input id="cfgIss" type="number" step="0.01" min="0" max="10" value="${c.iss ?? 5}" /></label>
     </div>
     <p class="empty">Alíquotas sugeridas: Simples Nacional 11,33% (Anexo III, faixa inicial), Lucro Presumido 16,33% (PIS, COFINS, IRPJ, CSLL e ISS 5%), Lucro Real ~21,25%. Confirme com a contabilidade.</p>
-    <div class="dialog__actions" style="justify-content:flex-start"><button class="btn-ghost" data-act="${sugerir}">Usar alíquota sugerida</button><button class="btn-primary" data-act="${salvar}">Salvar</button></div></div>`;
+    <div class="dialog__actions" style="justify-content:flex-start"><button class="btn-ghost" data-act="${sugerir}">Usar alíquota sugerida</button><button class="btn-primary" data-act="${salvar}">Salvar</button></div></div>
+  <div class="panel"><div class="panel__head"><h3 class="panel__title">Integração Asaas (boleto, Pix e NFS-e)</h3>${asaasOn() ? pill(`conectado · ${db.integracoes.ambiente}`).replace("pill--", "pill--green ") : pill("não configurado")}</div>
+    <ol class="steps">
+      <li>Crie a conta em <a href="https://www.asaas.com" target="_blank" rel="noopener">asaas.com</a> (para testar sem cobrar ninguém, use o <a href="https://sandbox.asaas.com" target="_blank" rel="noopener">sandbox</a>) e conclua a configuração fiscal (dados da prefeitura) para emitir NFS-e.</li>
+      <li>No Asaas, em <b>Integrações → Chave de API</b>, gere a chave.</li>
+      <li>No projeto da Vercel, em <b>Settings → Environment Variables</b>, crie <code>ASAAS_API_KEY</code> com a chave e, para produção, <code>ASAAS_ENV=producao</code>. Crie também <code>ASAAS_WEBHOOK_TOKEN</code> com uma senha qualquer e faça um novo deploy.</li>
+      <li>No Asaas, em <b>Integrações → Webhooks</b>, cadastre a URL <code>${escH(location.origin)}/api/asaas/webhook</code> com o mesmo token, para cobranças pagas e notas emitidas atualizarem sozinhas.</li>
+    </ol></div>`;
 }
 
 /* ---------- Navegação ---------- */
@@ -668,6 +882,12 @@ function renderView() {
   }
 }
 
+document.getElementById("homeLink").addEventListener("click", (e) => {
+  e.preventDefault();
+  if (!me) return;
+  state2.mod = can("overview") ? "overview" : Object.keys(MODULES).find(can);
+  render();
+});
 document.getElementById("railModules").addEventListener("click", (e) => {
   const b = e.target.closest("[data-mod]"); if (!b) return;
   state2.mod = b.dataset.mod; render();
@@ -709,6 +929,9 @@ document.getElementById("erpTabs").addEventListener("click", (e) => {
 erpEl.addEventListener("click", (e) => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   actionRegistry.get(b.dataset.act)?.();
+});
+erpEl.addEventListener("change", (e) => {
+  if (e.target.id === "extratoFile" && e.target.files[0]) importarExtrato(e.target.files[0]).catch((err) => toast(err.message));
 });
 erpEl.addEventListener("input", (e) => {
   const inp = e.target.closest("[data-filter]"); if (!inp) return;

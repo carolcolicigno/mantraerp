@@ -27,6 +27,9 @@ Cada pessoa pode trocar a própria senha pelo ícone de chave no menu lateral.
 | `DB_PATH` | `data/mantra.db` | Arquivo do banco SQLite (uso local) |
 | `SEED_PASSWORD` | aleatória | Senha inicial dos usuários de exemplo (só na criação do banco) |
 | `COOKIE_SECURE` | — | Use `1` em produção com HTTPS |
+| `ASAAS_API_KEY` | — | Chave da API do Asaas (ativa boleto/Pix e NFS-e) |
+| `ASAAS_ENV` | `sandbox` | Use `producao` para cobrar e emitir de verdade |
+| `ASAAS_WEBHOOK_TOKEN` | — | Token que o Asaas envia no webhook `/api/asaas/webhook` |
 
 ## Publicar
 
@@ -48,6 +51,16 @@ docker run -p 3000:3000 -v mantra-data:/data -e COOKIE_SECURE=1 mantra-erp
 ```
 
 Faça backup do arquivo do banco (`/data/mantra.db`) regularmente.
+
+## Integrações e automações
+
+- **Extrato bancário**: em Financeiro → Conciliação, importe OFX ou CSV; cada movimento é casado
+  com Contas a pagar/receber pelo valor e pela data (±7 dias) e o lançamento é baixado e conciliado.
+- **Cobranças recorrentes**: contratos vigentes geram sozinhos a parcela do mês atual e do próximo
+  (com reajuste anual), no dia de vencimento definido no contrato, sem duplicar lançamentos.
+- **Asaas**: com `ASAAS_API_KEY`, "Gerar boleto/Pix" cria a cobrança (link e Pix copia-e-cola) e
+  "Emitir NFS-e" emite a nota pela prefeitura. Cadastre o webhook para baixar pagamentos e
+  atualizar notas automaticamente. Configure o serviço municipal e o ISS em Configurações.
 
 ## Segurança
 

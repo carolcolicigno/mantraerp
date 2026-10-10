@@ -24,9 +24,9 @@ module.exports = () => ({
   contas: [
     { id: "a1", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-2), status: "pago", conciliado: true, aprovado: true },
     { id: "a2", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-1), status: "pago", conciliado: true, aprovado: true },
-    { id: "a3", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(0, 5), status: "aberto", conciliado: false, aprovado: true },
+    { id: `rec-k1-${m(0, 5).slice(0, 7)}`, contrato: "k1", tipo: "receber", descricao: "Parcela contrato — Fee de conta — branding e social", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(0, 5), status: "aberto", conciliado: false, aprovado: true },
     { id: "a4", tipo: "receber", descricao: "Campanha Verão", parceiro: "Havaianas", categoria: "Projeto", valor: 82000, vencimento: m(-1, 20), status: "aberto", conciliado: false, aprovado: true },
-    { id: "a5", tipo: "receber", descricao: "Fee mensal Vivo", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(0, 25), status: "aberto", conciliado: false, aprovado: true },
+    { id: `rec-k2-${m(0, 25).slice(0, 7)}`, contrato: "k2", tipo: "receber", descricao: "Parcela contrato — Fee de conta — performance", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(0, 25), status: "aberto", conciliado: false, aprovado: true },
     { id: "a6", tipo: "receber", descricao: "Fee mensal Vivo", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(-1, 25), status: "pago", conciliado: false, aprovado: true },
     { id: "a7", tipo: "receber", descricao: "Lançamento cartão", parceiro: "Nubank", categoria: "Projeto", valor: 120000, vencimento: m(1, 15), status: "aberto", conciliado: false, aprovado: true },
     { id: "a15", tipo: "receber", descricao: "Campanha Verão — 1ª parcela", parceiro: "Havaianas", categoria: "Projeto", valor: 82000, vencimento: m(-2, 20), status: "pago", conciliado: true, aprovado: true },
@@ -47,9 +47,9 @@ module.exports = () => ({
     { id: "n4", numero: "000234", cliente: "Havaianas", valor: 82000, emissao: m(-1, 12), status: "emitida", contabilidade: false },
   ],
   compras: [
-    { id: "p1", item: "Banco de imagens (anual)", fornecedor: "Adobe", solicitante: "Bia Santos", valor: 6200, cotacoes: 3, status: "cotação" },
-    { id: "p2", item: "Notebooks para direção de arte (2x)", fornecedor: "", solicitante: "Leo Prado", valor: 28000, cotacoes: 0, status: "solicitado" },
-    { id: "p3", item: "Captação drone campanha Verão", fornecedor: "Studio Lumen (produtora)", solicitante: "Bia Santos", valor: 9500, cotacoes: 2, status: "aprovado" },
+    { id: "p1", item: "Banco de imagens (anual)", fornecedor: "Adobe", solicitante: "Bia Santos", valor: 6200, status: "cotação", cotacoesLista: [{ fornecedor: "Adobe", valor: 6200, prazo: 1, obs: "Licença anual" }, { fornecedor: "Shutterstock", valor: 5400, prazo: 1, obs: "Pacote 750 imagens" }, { fornecedor: "Getty Images", valor: 7900, prazo: 2, obs: "" }] },
+    { id: "p2", item: "Notebooks para direção de arte (2x)", fornecedor: "", solicitante: "Leo Prado", valor: 28000, status: "solicitado", cotacoesLista: [] },
+    { id: "p3", item: "Captação drone campanha Verão", fornecedor: "Studio Lumen (produtora)", solicitante: "Bia Santos", valor: 9500, status: "aprovado", cotacoesLista: [{ fornecedor: "Studio Lumen (produtora)", valor: 9500, prazo: 7, obs: "", escolhida: true }, { fornecedor: "Voa Drones", valor: 11200, prazo: 5, obs: "" }] },
   ],
   propostas: [
     { id: "v1", cliente: "Nubank", titulo: "Lançamento cartão Ultravioleta", valor: 120000, data: m(-1, 3), status: "pedido" },
@@ -58,8 +58,8 @@ module.exports = () => ({
     { id: "v4", cliente: "Natura", titulo: "Social always-on 2027", valor: 300000, data: m(-1, 20), status: "aprovada" },
   ],
   contratos: [
-    { id: "k1", cliente: "Natura", objeto: "Fee de conta — branding e social", valorMensal: 45000, inicio: m(-9, 1), fim: m(3, 1), reajuste: 4.5, indice: "IPCA" },
-    { id: "k2", cliente: "Vivo", objeto: "Fee de conta — performance", valorMensal: 38000, inicio: m(-14, 1), fim: m(10, 1), reajuste: 5, indice: "IGP-M" },
+    { id: "k1", cliente: "Natura", objeto: "Fee de conta — branding e social", diaVencimento: 5, valorMensal: 45000, inicio: m(-9, 1), fim: m(3, 1), reajuste: 4.5, indice: "IPCA" },
+    { id: "k2", cliente: "Vivo", objeto: "Fee de conta — performance", diaVencimento: 25, valorMensal: 38000, inicio: m(-14, 1), fim: m(10, 1), reajuste: 5, indice: "IGP-M" },
     { id: "k3", cliente: "Havaianas", objeto: "Projeto campanha Verão", valorMensal: 41000, inicio: m(-4, 1), fim: m(-1, 1), reajuste: 0, indice: "—" },
   ],
   projetos: [
@@ -68,6 +68,13 @@ module.exports = () => ({
     { id: "j3", nome: "Performance Q4", cliente: "Vivo", tipo: "Conteúdo", status: "pausado", orcamento: 114000, custoTerceiros: 22000, horas: 410, valorHora: 140 },
     { id: "j4", nome: "Cartão Ultravioleta", cliente: "Nubank", tipo: "Campanha", status: "ativo", orcamento: 120000, custoTerceiros: 15000, horas: 180, valorHora: 140 },
   ],
+  atividades: [
+    { id: "f1", cliente: "Havaianas", proposta: "Campanha Inverno", tipo: "Reunião", data: m(0, 8), responsavel: "Bia Santos", descricao: "Apresentar ajustes da proposta", concluida: false },
+    { id: "f2", cliente: "Vivo", proposta: "Ativação festival", tipo: "E-mail", data: m(0, 14), responsavel: "Bia Santos", descricao: "Enviar proposta revisada", concluida: false },
+    { id: "f3", cliente: "Natura", proposta: "Social always-on 2027", tipo: "Ligação", data: m(0, 20), responsavel: "Carol Colicigno", descricao: "Alinhar início do contrato", concluida: false },
+    { id: "f4", cliente: "Nubank", proposta: "Lançamento cartão Ultravioleta", tipo: "WhatsApp", data: m(-1, 28), responsavel: "Bia Santos", descricao: "Confirmar aprovação do pedido", concluida: true },
+  ],
+  extrato: [],
   tarefas: [
     { id: "t1", projetoId: "j1", col: "todo", etiquetas: "UX Design, UX Research", titulo: "Processo de UX completo da primeira versão", responsavel: "Leo Prado", comentarios: 12, anexos: 4, prazo: m(0, 13) },
     { id: "t2", projetoId: "j1", col: "todo", etiquetas: "Wireframe", titulo: "Wireframes das telas principais", responsavel: "Ana Kim", comentarios: 5, anexos: 2, prazo: m(0, 17) },
