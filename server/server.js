@@ -7,6 +7,8 @@ const crypto = require("node:crypto");
 const seed = require("./seed");
 const { openStore } = require("./db");
 const asaas = require("./asaas");
+const automacao = require("./emails");
+const ia = require("./ia");
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC = path.join(__dirname, "..", "public");
@@ -15,8 +17,8 @@ const SESSION_DAYS = 7;
 /* ---------- Regras de acesso ---------- */
 const PERFIS = {
   admin: { modulos: "*", aprova: true },
-  financeiro: { modulos: ["overview", "financeiro", "faturamento", "compras", "contratos", "relatorios", "aprovacoes"], aprova: true },
-  gestor: { modulos: ["overview", "projetos", "servicos", "vendas", "contratos", "compras", "pessoas", "relatorios", "aprovacoes"], aprova: true },
+  financeiro: { modulos: ["overview", "financeiro", "faturamento", "compras", "contratos", "relatorios", "aprovacoes", "emails", "influenciadores"], aprova: true },
+  gestor: { modulos: ["overview", "projetos", "servicos", "vendas", "contratos", "compras", "pessoas", "relatorios", "aprovacoes", "influenciadores", "emails"], aprova: true },
   colaborador: { modulos: ["projetos", "servicos", "compras"], aprova: false },
 };
 // Coleção -> módulos que podem gravar nela.
@@ -34,12 +36,16 @@ const WRITE = {
   concorrencias: ["vendas"],
   extrato: ["financeiro"],
   atividades: ["vendas"],
+  influenciadores: ["influenciadores"],
+  influContratos: ["influenciadores"],
+  emails: ["emails"], // só status/vínculos; os itens são criados pela automação
+  consumo: [], // gravado só pelo servidor
   usuarios: [], // só admin
   config: [], // só admin
 };
 const COLLECTIONS = Object.keys(WRITE);
 // Módulos do usuário: lista personalizada (se houver) ou a do perfil. Usuário bloqueado não acessa nada.
-const MODULOS = ["overview", "projetos", "financeiro", "faturamento", "compras", "vendas", "contratos", "servicos", "pessoas", "relatorios", "aprovacoes"];
+const MODULOS = ["overview", "projetos", "financeiro", "faturamento", "compras", "vendas", "contratos", "servicos", "pessoas", "relatorios", "aprovacoes", "influenciadores", "emails"];
 const modulosDe = (u) => {
   if (!u || u.ativo === false || !PERFIS[u.perfil]) return [];
   if (u.perfil === "admin") return MODULOS;
@@ -78,7 +84,9 @@ async function log(usuario, acao, detalhe, s = store) {
 async function seedNegocio(s) {
   const d = seed();
   for (const col of COLLECTIONS) if (col !== "usuarios" && col !== "config") {
-    await s.delCol(col);
+    // E-mails e consumo reais são preservados; só os exemplos são recriados.
+    if (col === "emails" || col === "consumo") { for (const r of await s.all(col)) if (r.exemplo) await s.del(col, r.id); }
+    else await s.delCol(col);
     for (const r of d[col] || []) await s.put(col, r.id, r);
   }
   if (!(await s.get("config", "geral"))) await s.put("config", "geral", CONFIG_PADRAO);
@@ -121,7 +129,12 @@ async function dadosPara(u) {
   for (const col of Object.keys(ARQ_COLS)) if (hasModule(u, ARQ_COLS[col]) || canWrite(u, col)) out.docs[col] = await store.arqCount(col);
   out.config = [out.config.find((c) => c.id === "geral") || CONFIG_PADRAO];
   out.historico = hasModule(u, "aprovacoes") ? await store.hist() : [];
-  out.integracoes = { asaas: asaas.configurado(), ambiente: asaas.ambiente() };
+  // Caixa de e-mails: cada pessoa vê só as caixas da sua área; e-mails ignorados não vão para a tela.
+  const veCaixa = (e) => hasModule(u, "emails") && hasModule(u, e.area === "influenciadores" ? "influenciadores" : "financeiro");
+  out.emails = out.emails.filter((e) => e.status !== "ignorado" && veCaixa(e)).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 500);
+  out.consumo = isAdmin(u) || hasModule(u, "financeiro") ? out.consumo : [];
+  const inbox = (await getRec("config", "inbox-status")) || {};
+  out.integracoes = { asaas: asaas.configurado(), ambiente: asaas.ambiente(), emails: { ...automacao.status(), ultimaSync: inbox.ultimaSync || "", erros: inbox.erros || [] }, modeloIa: ia.MODELO, precoIa: ia.PRECO };
   return out;
 }
 
@@ -152,7 +165,7 @@ function cnpjValido(v) {
 const CAMPOS_PUBLICOS_COLAB = ["id", "nome", "cargo", "area", "fotoId", "_rev"];
 
 /* ---------- Arquivos (logos, fotos e documentos) ---------- */
-const ARQ_COLS = { concorrencias: "vendas", clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos" };
+const ARQ_COLS = { concorrencias: "vendas", clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos", influenciadores: "influenciadores", influContratos: "influenciadores", emails: "emails" };
 const ARQ_TIPOS = {
   "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", "application/msword": "doc",
@@ -307,6 +320,37 @@ async function webhookAsaas(req, res) {
   return send(res, 200, { ok: true });
 }
 
+/* ---------- Automação de e-mails ---------- */
+const ctxAutomacao = { store, log: (acao, detalhe) => log("Automação", acao, detalhe) };
+let sincronizando = null;
+const rodarSync = () => (sincronizando ||= automacao.sincronizar(ctxAutomacao).finally(() => { sincronizando = null; }));
+async function sincronizarEmails(u, body) {
+  if (!hasModule(u, "emails")) throw new HttpError(403, "Sem acesso à caixa de e-mails");
+  const st = automacao.status();
+  if (!st.google || !st.ia) {
+    if (body?.auto) return { registros: [] };
+    throw new HttpError(400, !st.google ? "Conecte o Google Workspace (GOOGLE_SERVICE_ACCOUNT) para ler os e-mails." : "Configure a chave da IA (ANTHROPIC_API_KEY).");
+  }
+  // Ao abrir o ERP a leitura é automática, no máximo a cada 10 minutos.
+  const ult = (await getRec("config", "inbox-status"))?.ultimaSync;
+  if (body?.auto && ult && Date.now() - new Date(ult).getTime() < 10 * 60e3) return { registros: [] };
+  try {
+    const r = await rodarSync();
+    const visiveis = r.novos.filter((e) => hasModule(u, e.area === "influenciadores" ? "influenciadores" : "financeiro"));
+    return { registros: visiveis.map((rec) => ({ col: "emails", rec })), novos: visiveis.length, erros: r.erros, pendentes: r.pendentes };
+  } catch (e) { throw new HttpError(502, e.message); }
+}
+// Vercel Cron: chama com "Authorization: Bearer CRON_SECRET".
+async function cronEmails(req, res) {
+  const segredo = process.env.CRON_SECRET, rec = String(req.headers.authorization || "");
+  if (!segredo || rec.length !== segredo.length + 7 || !crypto.timingSafeEqual(Buffer.from(rec), Buffer.from(`Bearer ${segredo}`))) throw new HttpError(401, "Não autorizado");
+  const st = automacao.status();
+  const out = {};
+  if (st.google && st.ia) { const r = await rodarSync().catch((e) => ({ erros: [e.message], novos: [] })); out.novos = r.novos.length; out.erros = r.erros; }
+  out.lembretes = await automacao.enviarLembretes(ctxAutomacao).catch((e) => ({ erro: e.message }));
+  return send(res, 200, out);
+}
+
 /* ---------- Gravação em lote ---------- */
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 const labelOf = (r) => r?.descricao || r?.nome || r?.titulo || r?.item || r?.objeto || r?.numero || r?.id || "";
@@ -318,8 +362,10 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
     for (const ch of changes) {
       const { op, col, id } = ch;
       if (!COLLECTIONS.includes(col) || typeof id !== "string" || !id || id.length > 64) throw new HttpError(400, "Registro inválido");
-      if (!canWrite(u, col)) throw new HttpError(403, `Seu perfil não pode alterar ${col}`);
+      if (!canWrite(u, col) || col === "consumo") throw new HttpError(403, `Seu perfil não pode alterar ${col}`);
       const antes = await getRec(col, id, s);
+      if (col === "config" && id !== "geral") throw new HttpError(403, "Configuração protegida");
+      if (col === "emails" && (!antes || op === "delete")) throw new HttpError(400, "Itens da caixa de e-mails são criados pela automação");
 
       if (op === "delete") {
         if (!antes) continue;
@@ -337,7 +383,10 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
       // Controle de concorrência: o registro precisa estar na mesma versão que o usuário editou.
       const revAntes = Number(antes?._rev) || 0;
       if (antes && (Number(ch.data._rev) || 0) !== revAntes) throw new HttpError(409, `"${labelOf(antes)}" foi alterado por outra pessoa. Os dados foram recarregados; refaça sua alteração.`);
-      const data = { ...ch.data, id, _rev: revAntes + 1 };
+      // Na caixa de e-mails só mudam status e vínculos; o restante vem da automação.
+      const data = col === "emails"
+        ? { ...antes, status: ["novo", "lançado", "arquivado"].includes(ch.data.status) ? ch.data.status : antes.status, contaId: String(ch.data.contaId || ""), vinculo: String(ch.data.vinculo || "").slice(0, 80), id, _rev: revAntes + 1 }
+        : { ...ch.data, id, _rev: revAntes + 1 };
       revs.push({ col, id, rev: data._rev });
       if (JSON.stringify(data).length > 20000) throw new HttpError(413, "Registro grande demais");
       if (col === "clientes" || col === "fornecedores") {
@@ -383,6 +432,8 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
           encargos: Math.min(200, Math.max(0, Number(data.encargos) || 0)),
           servicoMunicipal: String(data.servicoMunicipal || "").slice(0, 200),
           iss: Math.min(10, Math.max(0, Number(data.iss) || 0)),
+          lembretesAtivos: !!data.lembretesAtivos,
+          cotacaoDolar: Math.min(20, Math.max(1, Number(data.cotacaoDolar) || 5.5)),
         });
       }
       await s.put(col, id, data);
@@ -441,6 +492,7 @@ async function api(req, res, url) {
   await init();
   // Proteção CSRF simples: escritas exigem cabeçalho próprio (navegadores não o enviam entre sites sem CORS).
   if (route === "POST /api/asaas/webhook") return webhookAsaas(req, res);
+  if (route === "GET /api/cron/emails") return cronEmails(req, res);
   if (req.method !== "GET" && req.headers["x-mantra"] !== "1") throw new HttpError(403, "Requisição recusada");
 
   if (route === "POST /api/login") {
@@ -504,6 +556,7 @@ async function api(req, res, url) {
   }
   if (route === "POST /api/integracoes/cobranca" || route === "POST /api/integracoes/nfse" || route === "POST /api/integracoes/sincronizar")
     return send(res, 200, await integracao(u, route.split("/").pop(), await readBody(req)));
+  if (route === "POST /api/emails/sincronizar") return send(res, 200, await sincronizarEmails(u, await readBody(req)));
   if (route === "POST /api/reset") {
     if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");
     await store.tx(seedNegocio);

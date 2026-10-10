@@ -84,3 +84,9 @@ Faça backup do arquivo do banco (`/data/mantra.db`) regularmente.
   enviados a quem tem acesso ao módulo Pessoas.
 - Arquivos: só formatos permitidos, servidos com `nosniff`, CSP restritiva e checagem de permissão;
   são apagados junto com o cadastro.
+
+## Automação de e-mails, Drive e IA
+
+Lê `financeiro@` e `influenciadores@`, classifica anexos com o Claude, salva no Drive (`Financeiro|Influenciadores / Fornecedores|Clientes|Influenciadores / <nome> / <tipo> / <AAAA-MM>`), anexa ao cadastro e mostra na **Caixa de e-mails**. A leitura roda ao abrir o ERP (no máximo a cada 10 min), pelo botão "Ler e-mails agora" e pelo cron diário da Vercel, que também envia os lembretes de cobrança (liga/desliga em Configurações). O consumo de tokens fica em **Aprovações e configurações → Custos de APIs**.
+
+Variáveis: `GOOGLE_SERVICE_ACCOUNT` (JSON da conta de serviço com delegação em todo o domínio), `DRIVE_PASTA_RAIZ`, `ANTHROPIC_API_KEY`, `CRON_SECRET`; opcionais `CAIXAS_EMAIL`, `DRIVE_USUARIO`, `EMAIL_REMETENTE`.

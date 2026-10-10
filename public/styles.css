@@ -365,3 +365,9 @@ body { padding: 0; background: var(--bg); color: var(--text); }
 [hidden] { display: none !important; }
 input[type=checkbox] { accent-color: var(--accent); }
 .row-actions { flex-wrap: wrap; white-space: normal; max-width: 420px; margin-left: auto; }
+
+/* Contador de e-mails novos no menu */
+.rail__btn { position: relative; }
+.rail__badge { position: absolute; top: 0; right: -2px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: #e5484d; color: #fff; font: 600 10px/17px "DM Sans", sans-serif; text-align: center; }
+label.check { flex-direction: row; align-items: center; gap: 8px; grid-column: 1 / -1; display: flex; }
+.panel, .kpis { flex-shrink: 0; }

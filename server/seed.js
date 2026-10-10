@@ -75,6 +75,23 @@ module.exports = () => ({
     { id: "f4", cliente: "Nubank", proposta: "Lançamento cartão Ultravioleta", tipo: "WhatsApp", data: m(-1, 28), responsavel: "Bia Santos", descricao: "Confirmar aprovação do pedido", concluida: true },
   ],
   extrato: [],
+  influenciadores: [
+    { id: "i1", nome: "Duda Martins", arroba: "@dudamartins", rede: "Instagram", seguidores: 820000, nicho: "Beleza", email: "contato@dudamartins.com", cpfCnpj: "45.723.174/0001-10", pix: "contato@dudamartins.com", agencia: "Squad Talentos" },
+    { id: "i2", nome: "Gui Ferraz", arroba: "@guiferraz", rede: "TikTok", seguidores: 1350000, nicho: "Humor", email: "gui@ferraz.art", pix: "gui@ferraz.art" },
+  ],
+  influContratos: [
+    { id: "ic1", influenciador: "Duda Martins", cliente: "Natura", campanha: "Natal Natura", entregaveis: "2 reels + 4 stories", valor: 18000, dataPublicacao: m(0, 5), vencimentoPagamento: m(0, 20), status: "publicado", nfRecebida: false },
+    { id: "ic2", influenciador: "Gui Ferraz", cliente: "Vivo", campanha: "Vivo 5G verão", entregaveis: "3 TikToks", valor: 26000, dataPublicacao: m(0, 18), vencimentoPagamento: m(1, 5), status: "assinado", nfRecebida: false },
+  ],
+  emails: [
+    { id: "ex-1", exemplo: true, caixa: "financeiro@agenciamantra.com.br", area: "financeiro", de: "Studio Lumen <contato@lumen.tv>", assunto: "NF 1234 — filme conceito", data: m(0, 2) + "T13:20:00.000Z", tipo: "nota_fiscal", direcao: "a_pagar", resumo: "NFS-e da Studio Lumen referente ao filme conceito.", emitente: "Studio Lumen", numero: "1234", valor: 12500, vencimento: m(0, 25), entidade: { col: "fornecedores", id: "f1", nome: "Studio Lumen (produtora)" }, status: "novo", anexos: [{ nome: "NFSe-1234.pdf", tipo: "application/pdf" }] },
+    { id: "ex-2", exemplo: true, caixa: "influenciadores@agenciamantra.com.br", area: "influenciadores", de: "Duda Martins <contato@dudamartins.com>", assunto: "Nota fiscal campanha Natal", data: m(0, 3) + "T18:02:00.000Z", tipo: "nota_fiscal", direcao: "a_pagar", resumo: "NF da influenciadora Duda Martins pela campanha Natal Natura.", emitente: "Duda Martins", numero: "88", valor: 18000, vencimento: m(0, 20), influenciador: "@dudamartins", campanha: "Natal Natura", entidade: { col: "influenciadores", id: "i1", nome: "Duda Martins" }, status: "novo", anexos: [{ nome: "nf-88.pdf", tipo: "application/pdf" }] },
+    { id: "ex-3", exemplo: true, caixa: "financeiro@agenciamantra.com.br", area: "financeiro", de: "juridico@vivo.com.br", assunto: "Aditivo contratual assinado", data: m(0, 1) + "T10:00:00.000Z", tipo: "contrato", direcao: "informativo", resumo: "Aditivo do contrato Vivo assinado digitalmente.", emitente: "Vivo", valor: 0, entidade: { col: "clientes", id: "c2", nome: "Vivo" }, status: "novo", anexos: [{ nome: "aditivo-vivo.pdf", tipo: "application/pdf" }] },
+  ],
+  consumo: [
+    { id: "ia-ex1", exemplo: true, data: m(0, 2) + "T13:21:00.000Z", api: "Anthropic (Claude)", operacao: "Classificar e-mail", ref: "NF 1234 — filme conceito", modelo: "claude-opus-5-5", entrada: 3850, saida: 310, cacheLeitura: 0, cacheEscrita: 0, custoUsd: 0.0216 },
+    { id: "ia-ex2", exemplo: true, data: m(0, 3) + "T18:03:00.000Z", api: "Anthropic (Claude)", operacao: "Classificar e-mail", ref: "Nota fiscal campanha Natal", modelo: "claude-opus-5-5", entrada: 2900, saida: 280, cacheLeitura: 0, cacheEscrita: 0, custoUsd: 0.0172 },
+  ],
   concorrencias: [
     { id: "cc1", nome: "Concorrência Banco Aurora — conta digital", cliente: "Banco Aurora", status: "apresentada", responsavel: "Bia Santos", dataApresentacao: m(0, 3), valorEstimado: 960000,
       links: "Pasta da concorrência | https://drive.google.com/drive/folders/exemplo", custos: [

@@ -13,7 +13,7 @@ const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const escH = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 /* ---------- Comunicação com o servidor ---------- */
-const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas", "extrato", "atividades", "concorrencias"];
+const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas", "extrato", "atividades", "concorrencias", "influenciadores", "influContratos", "emails"];
 let db = null;
 let me = null;
 let synced = {};
@@ -93,8 +93,8 @@ function toast(msg) {
 /* ---------- Permissões ---------- */
 const PERFIS = {
   admin: { label: "Administrador", modulos: "*", aprova: true },
-  financeiro: { label: "Financeiro", modulos: ["overview", "financeiro", "faturamento", "compras", "contratos", "relatorios", "aprovacoes"], aprova: true },
-  gestor: { label: "Gestor", modulos: ["overview", "projetos", "servicos", "vendas", "contratos", "compras", "pessoas", "relatorios", "aprovacoes"], aprova: true },
+  financeiro: { label: "Financeiro", modulos: ["overview", "financeiro", "faturamento", "compras", "contratos", "relatorios", "aprovacoes", "emails", "influenciadores"], aprova: true },
+  gestor: { label: "Gestor", modulos: ["overview", "projetos", "servicos", "vendas", "contratos", "compras", "pessoas", "relatorios", "aprovacoes", "influenciadores", "emails"], aprova: true },
   colaborador: { label: "Colaborador", modulos: ["projetos", "servicos", "compras"], aprova: false },
 };
 const can = (mod) => mod === "usuarios" ? currentUser().perfil === "admin" : (currentUser().modulosEfetivos || []).includes(mod);
@@ -107,7 +107,7 @@ const SCHEMAS = {
     { k: "tipo", label: "Tipo", type: "select", options: ["receber", "pagar"] },
     { k: "descricao", label: "Descrição" },
     { k: "parceiro", label: "Cliente / Fornecedor" },
-    { k: "categoria", label: "Categoria", type: "select", options: ["Fee", "Projeto", "Produção", "Mídia", "Software", "Estrutura", "Pessoal", "Impostos", "Concorrência", "Outros"] },
+    { k: "categoria", label: "Categoria", type: "select", options: ["Fee", "Projeto", "Produção", "Mídia", "Software", "Estrutura", "Pessoal", "Impostos", "Concorrência", "Influenciadores", "Outros"] },
     { k: "valor", label: "Valor", type: "money" },
     { k: "vencimento", label: "Vencimento", type: "date" },
     { k: "status", label: "Status", type: "select", options: ["aberto", "pago"] },
@@ -267,6 +267,37 @@ const SCHEMAS = {
     { section: "Permissões personalizadas (opcional)" },
     { k: "modulos", label: "Marque só se este usuário precisar de módulos diferentes do padrão do perfil. Administradores sempre veem tudo.", type: "checks", full: true, options: () => MODULOS_PERM, labels: () => Object.fromEntries(MODULOS_PERM.map((m) => [m, MODULES[m].label])) },
     { k: "aprovacao", label: "Pode aprovar despesas e compras?", type: "select", options: ["perfil", "sim", "nao"], labels: { perfil: "Padrão do perfil", sim: "Sim", nao: "Não" } },
+  ] },
+  influenciadores: { singular: "Influenciador", wide: true, fields: [
+    { section: "Perfil" },
+    { k: "fotoId", label: "Foto", type: "image", categoria: "foto", full: true },
+    { k: "nome", label: "Nome" }, { k: "arroba", label: "@ principal" },
+    { k: "rede", label: "Rede principal", type: "select", options: ["Instagram", "TikTok", "YouTube", "Kwai", "X / Twitter", "LinkedIn", "Twitch", "Outra"] },
+    { k: "seguidores", label: "Seguidores", type: "number" },
+    { k: "nicho", label: "Nicho", optional: true },
+    { k: "agencia", label: "Agência / empresário", optional: true },
+    { section: "Contato e pagamento" },
+    { k: "email", label: "E-mail (o mesmo que manda NF e contratos)", type: "email", optional: true },
+    { k: "telefone", label: "Telefone", type: "tel", optional: true },
+    { k: "cpfCnpj", label: "CPF ou CNPJ (de quem emite a NF)", type: "cnpj", optional: true },
+    { k: "pix", label: "Chave Pix", optional: true },
+    { k: "dadosBancarios", label: "Banco / agência / conta", optional: true },
+    { section: "Links de pastas" },
+    { k: "links", label: "Um por linha, no formato: Nome | https://link (Drive, mídia kit…)", type: "textarea", optional: true, full: true },
+    { section: "Observações" },
+    { k: "observacoes", label: "Observações", type: "textarea", optional: true, full: true },
+  ] },
+  influContratos: { singular: "Contrato de influenciador", wide: true, fields: [
+    { k: "influenciador", label: "Influenciador", type: "select", options: opts("influenciadores") },
+    { k: "cliente", label: "Cliente", type: "select", options: opts("clientes") },
+    { k: "campanha", label: "Campanha" },
+    { k: "status", label: "Status", type: "select", options: ["negociação", "contrato enviado", "assinado", "publicado", "pago", "cancelado"] },
+    { k: "entregaveis", label: "Entregáveis", type: "textarea", full: true },
+    { k: "valor", label: "Cachê", type: "money" },
+    { k: "dataPublicacao", label: "Data de publicação", type: "date", optional: true },
+    { k: "vencimentoPagamento", label: "Vencimento do pagamento", type: "date", optional: true },
+    { k: "nfRecebida", label: "NF recebida", type: "bool" },
+    { k: "links", label: "Links (contrato, posts publicados) — Nome | https://link", type: "textarea", optional: true, full: true },
   ] },
   concorrencias: { singular: "Concorrência", wide: true, fields: [
     { section: "Concorrência" },
@@ -447,7 +478,7 @@ const labelOf = (r) => r.descricao || r.nome || r.titulo || r.item || r.objeto |
 const PILL = {
   pago: "green", emitida: "green", aprovado: "green", aprovada: "green", pedido: "blue", vigente: "green", ativo: "green",
   aberto: "yellow", "cotação": "yellow", solicitado: "purple", enviada: "blue", rascunho: "", "a vencer": "yellow",
-  atrasado: "red", ganha: "green", apresentada: "blue", "em preparação": "yellow", cancelada: "", bloqueado: "red", "lançado": "green", conciliado: "green", processando: "yellow", erro: "red", hoje: "blue", agendado: "", "concluído": "green", "sem correspondência": "yellow", ignorado: "", pendente: "yellow", "previsão": "blue", recusado: "red", perdida: "red", cancelada: "red", encerrado: "", "aguardando aprovação": "purple",
+  atrasado: "red", ganha: "green", apresentada: "blue", "em preparação": "yellow", cancelada: "", bloqueado: "red", "lançado": "green", conciliado: "green", processando: "yellow", erro: "red", hoje: "blue", agendado: "", "concluído": "green", "sem correspondência": "yellow", ignorado: "", pendente: "yellow", "previsão": "blue", recusado: "red", perdida: "red", cancelada: "red", encerrado: "", "aguardando aprovação": "purple", novo: "blue", arquivado: "", recebida: "green", "Nota fiscal": "purple", Boleto: "yellow", Contrato: "blue", negociação: "yellow", "contrato enviado": "blue", assinado: "green", publicado: "purple",
 };
 const pill = (s) => `<span class="pill pill--${PILL[s] ?? ""}">${escH(s)}</span>`;
 const kpi = (label, value, hint = "", cls = "") => `<div class="kpi"><div class="kpi__label">${label}</div><div class="kpi__value ${cls}">${value}</div>${hint ? `<div class="kpi__hint">${hint}</div>` : ""}</div>`;
@@ -594,6 +625,9 @@ const TIPOS_DOC = {
   contratos: ["Contrato assinado", "Aditivo", "Distrato", "Outros"],
   concorrencias: ["Briefing / edital", "Apresentação", "Orçamento", "Comprovante de gasto", "Outros"],
   projetos: ["Briefing", "Cronograma", "Aprovação", "Outros"],
+  influenciadores: ["Contrato", "Nota fiscal", "Mídia kit", "Comprovante", "Documento pessoal", "Outros"],
+  influContratos: ["Contrato assinado", "Nota fiscal", "Comprovante", "Print de publicação", "Outros"],
+  emails: ["Nota fiscal", "Boleto", "Contrato", "Comprovante", "Outros"],
 };
 const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
 const docsCount = (col, id) => db.docs?.[col]?.[id] || 0;
@@ -640,7 +674,7 @@ async function abrirDocumentos(col, rec) {
   dlg.ondrop = (e) => { e.preventDefault(); if (podeEditar && e.dataTransfer.files.length) enviar([...e.dataTransfer.files]); };
   await draw(); dlg.showModal();
 }
-const MODULO_DOC = { concorrencias: "vendas", clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos" };
+const MODULO_DOC = { concorrencias: "vendas", clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos", influenciadores: "influenciadores", influContratos: "influenciadores", emails: "emails" };
 const thumb = (id, nome, redondo) => `<span class="thumb-cell">${id ? `<img class="thumb ${redondo ? "thumb--round" : ""}" src="${fileUrl(id)}" alt="" loading="lazy" />` : `<span class="thumb thumb--empty ${redondo ? "thumb--round" : ""}">${escH(String(nome || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase())}</span>`}${escH(nome)}</span>`;
 
 /* ----- Cotações lado a lado ----- */
@@ -716,6 +750,8 @@ const ICON = {
   relatorios: '<path d="M6 20v-6M12 20V6M18 20v-9"/>',
   usuarios: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 11v6M14 14h6"/>',
   aprovacoes: '<path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  influenciadores: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
+  emails: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
 };
 
 const MODULES = {
@@ -753,10 +789,13 @@ const MODULES = {
   servicos: { label: "Projetos e serviços", render: renderServicos },
   pessoas: { label: "Pessoas", render: renderPessoas },
   relatorios: { label: "Relatórios gerenciais", render: renderRelatorios },
+  emails: { label: "Caixa de e-mails", render: renderEmails },
+  influenciadores: { label: "Influenciadores", tabs: { "Contratos e pagamentos": renderInfluContratos, Influenciadores: renderInfluenciadores } },
   usuarios: { label: "Usuários e acessos", tabs: { Usuários: renderUsuarios, "Permissões por perfil": renderMatriz } },
   aprovacoes: { label: "Aprovações e configurações", tabs: {
     "Aprovações pendentes": renderAprovacoes,
     "Configurações": renderConfig,
+    "Custos de APIs": renderCustosApi,
     "Histórico de alterações": () => table({ title: "Histórico de alterações", rows: db.historico,
       cols: [{ label: "Quando", get: txt("quando") }, { label: "Usuário", get: txt("usuario") }, { label: "Ação", get: (r) => pill(r.acao) }, { label: "Detalhe", get: txt("detalhe") }] }),
   } },
@@ -1063,7 +1102,7 @@ function renderAprovacoes() {
     actions: canApprove() ? (r) => [{ label: "Aprovar", cls: "ok", fn: () => decidirCompra(r, true) }, { label: "Recusar", cls: "no", fn: () => decidirCompra(r, false) }] : null });
 }
 
-const MODULOS_PERM = ["overview", "projetos", "financeiro", "faturamento", "compras", "vendas", "contratos", "servicos", "pessoas", "relatorios", "aprovacoes"];
+const MODULOS_PERM = ["overview", "projetos", "financeiro", "faturamento", "compras", "vendas", "contratos", "servicos", "pessoas", "relatorios", "aprovacoes", "influenciadores", "emails"];
 const modulosEfetivos = (u) => u.ativo === false ? [] : u.perfil === "admin" ? MODULOS_PERM : (u.modulos?.length ? u.modulos : PERFIS[u.perfil]?.modulos || []);
 function renderUsuarios() {
   const ativos = db.usuarios.filter((u) => u.ativo !== false);
@@ -1166,6 +1205,136 @@ function abrirCustos(c) {
   draw(); dlg.showModal();
 }
 
+/* ----- Caixa de e-mails (automação) ----- */
+const TIPO_EMAIL = { nota_fiscal: "Nota fiscal", boleto: "Boleto", contrato: "Contrato", comprovante_pagamento: "Comprovante", orcamento: "Orçamento", cobranca: "Cobrança", outro: "Outro" };
+const emailsNovos = () => (db?.emails || []).filter((e) => e.status === "novo").length;
+const podeLancarConta = () => ["financeiro", "aprovacoes", "contratos"].some(can);
+const filtroEmail = { area: "todas", status: "novo" };
+function lancarEmail(e) {
+  const influ = e.entidade?.col === "influenciadores";
+  const conta = { id: uid(), tipo: "pagar", descricao: `${TIPO_EMAIL[e.tipo] || "Documento"}${e.numero ? " " + e.numero : ""} — ${e.entidade?.nome || e.emitente || e.de}${e.campanha ? ` (${e.campanha})` : ""}`.slice(0, 160),
+    parceiro: e.entidade?.nome || e.emitente || "A definir", categoria: influ ? "Influenciadores" : e.entidade?.col === "fornecedores" ? (db.fornecedores.find((f) => f.id === e.entidade.id)?.categoria || "Outros") : "Outros",
+    valor: e.valor, vencimento: e.vencimento || addDays(TODAY, 7), status: "aberto", conciliado: false, aprovado: canApprove() || e.valor < 5000, nota: e.tipo === "nota_fiscal" ? e.numero : "", origemEmail: e.id };
+  if (!SCHEMAS.contas.fields[3].options.includes(conta.categoria)) conta.categoria = "Outros";
+  db.contas.push(conta);
+  e.status = "lançado"; e.contaId = conta.id;
+  // NF de influenciador: marca o contrato em aberto dele como "NF recebida".
+  if (influ && e.tipo === "nota_fiscal") {
+    const k = db.influContratos.find((x) => x.influenciador === e.entidade.nome && !x.nfRecebida && x.status !== "cancelado");
+    if (k) { k.nfRecebida = true; k.contaId ||= conta.id; e.vinculo = k.campanha; }
+  }
+  log("Lançado a partir de e-mail", `${conta.descricao} — ${BRL(conta.valor)}`);
+  toast(conta.aprovado ? "Lançado em Contas a pagar" : "Lançado em Contas a pagar — aguardando aprovação"); render();
+}
+async function sincronizarEmails() {
+  try { toast("Lendo as caixas de e-mail…"); const r = await apiAction("/api/emails/sincronizar", {}); toast(r.novos ? `${r.novos} documento(s) novo(s)` : r.erros?.length ? r.erros[0] : "Nenhum documento novo"); }
+  catch (e) { toast(e.message); }
+}
+function renderEmails() {
+  const st = db.integracoes?.emails || {};
+  const todos = db.emails || [];
+  const rows = todos.filter((e) => (filtroEmail.area === "todas" || e.area === filtroEmail.area) && (filtroEmail.status === "todos" || e.status === filtroEmail.status));
+  const novos = todos.filter((e) => e.status === "novo");
+  const pagar = novos.filter((e) => e.direcao === "a_pagar" && e.valor > 0);
+  const semDono = novos.filter((e) => !e.entidade);
+  const sel = (id, val, opcoes) => `<select class="filter-input" data-emailf="${id}">${Object.entries(opcoes).map(([k, l]) => `<option value="${k}" ${val === k ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  const extra = sel("area", filtroEmail.area, { todas: "Todas as caixas", financeiro: "financeiro@", influenciadores: "influenciadores@" }) +
+    sel("status", filtroEmail.status, { novo: "Novos", "lançado": "Lançados", arquivado: "Arquivados", todos: "Todos" }) +
+    (st.google && st.ia ? `<button class="btn-primary" data-act="${reg(sincronizarEmails)}">Ler e-mails agora</button>` : "");
+  const aviso = !(st.google && st.ia) ? `<div class="panel"><div class="panel__head"><h3 class="panel__title">Automação ainda não conectada</h3>${pill("pendente")}</div>
+    <p class="empty">Faltam: ${[!st.google && "conta de serviço do Google Workspace", !st.ia && "chave da IA (ANTHROPIC_API_KEY)", !st.drive && "pasta raiz do Drive"].filter(Boolean).join(", ")}. O passo a passo está em Aprovações e configurações → Configurações. Abaixo, exemplos de como os documentos vão aparecer.</p></div>`
+    : st.erros?.length ? `<div class="panel"><p class="empty">Última leitura com avisos: ${escH(st.erros.join(" · "))}</p></div>` : "";
+  return aviso + `<div class="kpis">
+    ${kpi("Documentos novos", novos.length, st.ultimaSync ? `última leitura ${new Date(st.ultimaSync).toLocaleString("pt-BR")}` : "", novos.length ? "" : "pos")}
+    ${kpi("A pagar vindos por e-mail", BRL(sum(pagar, (e) => e.valor)), `${pagar.length} documentos não lançados`)}
+    ${kpi("Notas fiscais novas", novos.filter((e) => e.tipo === "nota_fiscal").length)}
+    ${kpi("Sem cadastro identificado", semDono.length, "cadastre o fornecedor ou influenciador", semDono.length ? "neg" : "")}
+  </div>` + table({ title: "Caixa de e-mails", rows, extra,
+    cols: [{ label: "Recebido", get: (r) => new Date(r.data).toLocaleDateString("pt-BR") },
+      { label: "Caixa", get: (r) => pill(r.area === "influenciadores" ? "influenciadores@" : "financeiro@") },
+      { label: "Documento", get: (r) => `${pill(TIPO_EMAIL[r.tipo] || r.tipo)}<div><b>${escH(r.assunto)}</b></div><div class="crumbs">${escH(r.resumo || "")}</div>` },
+      { label: "De / cadastro", get: (r) => (r.entidade ? `<b>${escH(r.entidade.nome)}</b>` : `<span class="neg">não identificado</span>`) + `<div class="crumbs">${escH(r.de)}</div>` },
+      { label: "Valor", num: true, get: (r) => (r.valor ? BRL(r.valor) : "—") },
+      { label: "Vencimento", get: (r) => (r.vencimento ? fmtDate(r.vencimento) : "—") },
+      { label: "Arquivos", get: (r) => (r.anexos || []).map((a) => `<div>${a.arqId ? `<a href="${fileUrl(a.arqId)}" target="_blank" rel="noopener">${escH(a.nome)}</a>` : escH(a.nome)}${a.drive ? ` · <a href="${escH(a.drive)}" target="_blank" rel="noopener">Drive</a>` : ""}</div>`).join("") + (r.drivePasta ? `<a class="link-chip" href="${escH(r.drivePasta)}" target="_blank" rel="noopener">📁 pasta</a>` : "") || "—" },
+      { label: "Status", get: (r) => pill(r.status) + (r.vinculo ? `<div class="crumbs">${escH(r.vinculo)}</div>` : "") }],
+    actions: (r) => [
+      r.status === "novo" && r.direcao === "a_pagar" && r.valor > 0 && podeLancarConta() && { label: "Lançar em contas a pagar", cls: "ok", fn: () => lancarEmail(r) },
+      r.contaId && { label: "Ver lançamento", fn: () => { state2.mod = "financeiro"; state2.tab.financeiro = "Contas a pagar"; tableFilters["Contas a pagar"] = (db.contas.find((c) => c.id === r.contaId)?.descricao || "").slice(0, 30); render(); } },
+      r.status === "novo" && { label: "Arquivar", fn: () => { r.status = "arquivado"; log("E-mail arquivado", r.assunto); render(); } },
+      r.status === "arquivado" && { label: "Reabrir", fn: () => { r.status = "novo"; render(); } },
+      !r.entidade && r.documento && { label: "Cadastrar fornecedor", fn: () => openForm(r.area === "influenciadores" ? "influenciadores" : "fornecedores", null, r.area === "influenciadores" ? { nome: r.emitente, cpfCnpj: r.documento, rede: "Instagram", seguidores: 0 } : { nome: r.emitente, cnpj: r.documento, categoria: "Outros" }) },
+    ] });
+}
+
+/* ----- Influenciadores ----- */
+const influContaStatus = (k) => { const c = k.contaId && db.contas.find((x) => x.id === k.contaId); return c ? contaStatus(c) : "—"; };
+function lancarCache(k) {
+  const conta = { id: uid(), tipo: "pagar", descricao: `Cachê ${k.influenciador} — ${k.campanha}`, parceiro: k.influenciador, categoria: "Influenciadores", valor: k.valor, vencimento: k.vencimentoPagamento || addDays(TODAY, 15), status: "aberto", conciliado: false, aprovado: canApprove() || k.valor < 5000 };
+  db.contas.push(conta); k.contaId = conta.id;
+  log("Cachê lançado", `${conta.descricao} — ${BRL(conta.valor)}`); toast(conta.aprovado ? "Lançado em Contas a pagar" : "Lançado — aguardando aprovação"); render();
+}
+function renderInfluContratos() {
+  const rows = [...db.influContratos].sort((a, b) => String(a.vencimentoPagamento || "").localeCompare(String(b.vencimentoPagamento || "")));
+  const ativos = rows.filter((k) => !["pago", "cancelado"].includes(k.status));
+  const semNf = ativos.filter((k) => !k.nfRecebida && ["publicado", "assinado"].includes(k.status));
+  return `<div class="kpis">
+    ${kpi("Cachês em aberto", BRL(sum(ativos, (k) => k.valor)), `${ativos.length} contratos`)}
+    ${kpi("Aguardando NF", semNf.length, "publicados ou assinados sem nota", semNf.length ? "neg" : "pos")}
+    ${kpi("Pagos no ano", BRL(sum(rows.filter((k) => k.status === "pago"), (k) => k.valor)))}
+    ${kpi("Documentos novos no e-mail", (db.emails || []).filter((e) => e.area === "influenciadores" && e.status === "novo").length, "influenciadores@")}
+  </div>` + table({ title: "Contratos de influenciadores", rows, addCol: "influContratos", addDefaults: { status: "negociação", nfRecebida: false, valor: 0 },
+    cols: [{ label: "Influenciador", get: (r) => `<b>${escH(r.influenciador)}</b>${linksHtml(r)}` }, { label: "Cliente / campanha", get: (r) => `${escH(r.cliente)}<div class="crumbs">${escH(r.campanha)}</div>` },
+      { label: "Entregáveis", get: txt("entregaveis") }, { label: "Publicação", get: date("dataPublicacao") }, { label: "Cachê", num: true, get: money("valor") },
+      { label: "Vencimento", get: date("vencimentoPagamento") }, { label: "NF", get: (r) => pill(r.nfRecebida ? "recebida" : "pendente") }, { label: "Status", get: (r) => pill(r.status) }, { label: "Pagamento", get: (r) => (r.contaId ? pill(influContaStatus(r)) : "—") }],
+    actions: (r) => [
+      !r.contaId && r.status !== "cancelado" && podeLancarConta() && { label: "Lançar pagamento", cls: "main", fn: () => lancarCache(r) },
+      docsAction("influContratos")(r), ...editDel("influContratos")(r)] });
+}
+function renderInfluenciadores() {
+  return table({ title: "Influenciadores", rows: db.influenciadores, addCol: "influenciadores", addDefaults: { rede: "Instagram", seguidores: 0 },
+    cols: [{ label: "Influenciador", get: (r) => thumb(r.fotoId, r.nome, true) }, { label: "@", get: txt("arroba") }, { label: "Rede", get: (r) => pill(r.rede) },
+      { label: "Seguidores", num: true, get: (r) => (Number(r.seguidores) || 0).toLocaleString("pt-BR") }, { label: "Nicho", get: (r) => escH(r.nicho || "—") }, { label: "E-mail", get: (r) => escH(r.email || "—") },
+      { label: "Campanhas", num: true, get: (r) => db.influContratos.filter((k) => k.influenciador === r.nome).length },
+      { label: "Total contratado", num: true, get: (r) => BRL(sum(db.influContratos.filter((k) => k.influenciador === r.nome && k.status !== "cancelado"), (k) => k.valor)) }],
+    actions: (r) => [docsAction("influenciadores")(r), ...editDel("influenciadores")(r)] });
+}
+
+/* ----- Custos das APIs (tokens) ----- */
+function renderCustosApi() {
+  const usd = Number(cfg().cotacaoDolar) || 5.5;
+  const rows = [...(db.consumo || [])].sort((a, b) => b.data.localeCompare(a.data));
+  const mes = rows.filter((r) => r.data.slice(0, 7) === TODAY.slice(0, 7));
+  const ia = rows.filter((r) => r.api.startsWith("Anthropic"));
+  const custoMes = sum(mes, (r) => r.custoUsd);
+  const docsMes = mes.filter((r) => r.api.startsWith("Anthropic")).length;
+  const porMes = {};
+  for (const r of rows) { const k = r.data.slice(0, 7); (porMes[k] ||= { usd: 0, n: 0, tokens: 0 }); porMes[k].usd += r.custoUsd || 0; porMes[k].n++; porMes[k].tokens += (r.entrada || 0) + (r.saida || 0) + (r.cacheLeitura || 0); }
+  const p = db.integracoes?.precoIa || {};
+  const real = (v) => BRL(v * usd);
+  return `<div class="kpis">
+    ${kpi("Gasto com IA no mês", real(custoMes), `US$ ${custoMes.toFixed(2)} · dólar a R$ ${usd.toFixed(2).replace(".", ",")}`)}
+    ${kpi("Documentos analisados no mês", docsMes, docsMes ? `${real(custoMes / docsMes)} por documento` : "")}
+    ${kpi("Tokens no mês", sum(mes, (r) => (r.entrada || 0) + (r.saida || 0)).toLocaleString("pt-BR"), `${sum(mes, (r) => r.entrada || 0).toLocaleString("pt-BR")} de entrada · ${sum(mes, (r) => r.saida || 0).toLocaleString("pt-BR")} de saída`)}
+    ${kpi("Projeção do mês", real(custoMes / Math.max(1, Number(TODAY.slice(8, 10))) * 30), "no ritmo atual")}
+  </div>
+  <div class="panel"><div class="panel__head"><h3 class="panel__title">APIs usadas e quanto custam</h3></div>
+    <table class="table"><thead><tr><th>API</th><th>Para que serve</th><th>Como cobra</th><th class="num">Gasto no mês</th></tr></thead><tbody>
+      <tr><td><b>Anthropic (Claude)</b><div class="crumbs">${escH(db.integracoes?.modeloIa || "")}</div></td><td>Lê e classifica notas, boletos e contratos que chegam por e-mail</td><td>Por token: US$ ${p.entrada ?? 4} por milhão de entrada, US$ ${p.saida ?? 20} por milhão de saída. Um PDF de nota fica em torno de 2 a 5 mil tokens.</td><td class="num">${real(sum(mes.filter((r) => r.api.startsWith("Anthropic")), (r) => r.custoUsd))}</td></tr>
+      <tr><td><b>Google Gmail e Drive</b></td><td>Lê as caixas, envia lembretes e organiza os arquivos no Drive</td><td>Sem custo extra: incluído no Google Workspace (limites diários bem acima do uso da agência)</td><td class="num">${BRL(0)}</td></tr>
+      <tr><td><b>Asaas</b></td><td>Boletos, Pix e NFS-e</td><td>Taxa por cobrança paga e por nota emitida, conforme o plano contratado no Asaas (cobrada lá, não aqui)</td><td class="num">—</td></tr>
+      <tr><td><b>Vercel + Neon</b></td><td>Hospedagem e banco de dados</td><td>Plano da Vercel e do Neon (gratuitos até o limite de uso)</td><td class="num">—</td></tr>
+    </tbody></table>
+    <p class="empty">Cotação do dólar usada na conversão: ajuste em Configurações. Valores da IA são estimados pela tabela de preços; a fatura oficial fica no console da Anthropic.</p></div>
+  <div class="panel"><div class="panel__head"><h3 class="panel__title">Por mês</h3></div>
+    ${Object.keys(porMes).length ? `<table class="table"><thead><tr><th>Mês</th><th class="num">Chamadas</th><th class="num">Tokens</th><th class="num">US$</th><th class="num">R$</th></tr></thead><tbody>
+      ${Object.entries(porMes).sort((a, b) => b[0].localeCompare(a[0])).map(([k, v]) => `<tr><td>${monthLabel(k)}</td><td class="num">${v.n}</td><td class="num">${v.tokens.toLocaleString("pt-BR")}</td><td class="num">${v.usd.toFixed(4)}</td><td class="num">${real(v.usd)}</td></tr>`).join("")}</tbody></table>` : `<p class="empty">Nenhum consumo registrado ainda.</p>`}</div>` +
+  table({ title: "Chamadas às APIs", rows,
+    cols: [{ label: "Quando", get: (r) => new Date(r.data).toLocaleString("pt-BR") }, { label: "API", get: (r) => pill(r.api) }, { label: "Operação", get: txt("operacao") }, { label: "Referência", get: (r) => escH(r.ref || "—") },
+      { label: "Tokens entrada", num: true, get: (r) => (r.entrada || 0).toLocaleString("pt-BR") }, { label: "Tokens saída", num: true, get: (r) => (r.saida || 0).toLocaleString("pt-BR") },
+      { label: "Custo", num: true, get: (r) => real(r.custoUsd || 0) }] });
+}
+
 const REGIMES = { "Simples Nacional": 11.33, "Lucro Presumido": 16.33, "Lucro Real": 21.25 };
 function renderConfig() {
   if (currentUser().perfil !== "admin") return `<div class="panel empty">Somente administradores podem alterar as configurações.</div>`;
@@ -1176,7 +1345,9 @@ function renderConfig() {
     const encargos = Number(document.getElementById("cfgEncargos").value) || 0;
     const servicoMunicipal = document.getElementById("cfgServico").value.trim();
     const iss = Number(document.getElementById("cfgIss").value) || 0;
-    db.config = [{ ...c, regime, aliquota, encargos, servicoMunicipal, iss }];
+    const lembretesAtivos = document.getElementById("cfgLembretes").checked;
+    const cotacaoDolar = Number(document.getElementById("cfgDolar").value) || 5.5;
+    db.config = [{ ...c, regime, aliquota, encargos, servicoMunicipal, iss, lembretesAtivos, cotacaoDolar }];
     log("Configuração", `${regime}: impostos ${aliquota}% · encargos ${encargos}%`); toast("Configurações salvas"); render();
   });
   const sugerir = reg(() => { const r = document.getElementById("cfgRegime").value; document.getElementById("cfgAliquota").value = REGIMES[r]; });
@@ -1187,6 +1358,8 @@ function renderConfig() {
       <label>Encargos sobre salários (%)<input id="cfgEncargos" type="number" step="0.1" min="0" max="200" value="${c.encargos}" /></label>
       <label>Serviço municipal da NFS-e (como aparece na prefeitura)<input id="cfgServico" value="${escH(c.servicoMunicipal || "")}" placeholder="ex.: 17.06 - Propaganda e publicidade" /></label>
       <label>Alíquota de ISS (%)<input id="cfgIss" type="number" step="0.01" min="0" max="10" value="${c.iss ?? 5}" /></label>
+      <label>Cotação do dólar (custos de APIs)<input id="cfgDolar" type="number" step="0.01" min="1" max="20" value="${c.cotacaoDolar ?? 5.5}" /></label>
+      <label class="check"><input id="cfgLembretes" type="checkbox" ${c.lembretesAtivos ? "checked" : ""} /> Enviar lembretes de cobrança por e-mail aos clientes (3 dias antes e 1 dia após o vencimento)</label>
     </div>
     <p class="empty">Alíquotas sugeridas: Simples Nacional 11,33% (Anexo III, faixa inicial), Lucro Presumido 16,33% (PIS, COFINS, IRPJ, CSLL e ISS 5%), Lucro Real ~21,25%. Confirme com a contabilidade.</p>
     <div class="dialog__actions" style="justify-content:flex-start"><button class="btn-ghost" data-act="${sugerir}">Usar alíquota sugerida</button><button class="btn-primary" data-act="${salvar}">Salvar</button></div></div>
@@ -1196,6 +1369,14 @@ function renderConfig() {
       <li>No Asaas, em <b>Integrações → Chave de API</b>, gere a chave.</li>
       <li>No projeto da Vercel, em <b>Settings → Environment Variables</b>, crie <code>ASAAS_API_KEY</code> com a chave e, para produção, <code>ASAAS_ENV=producao</code>. Crie também <code>ASAAS_WEBHOOK_TOKEN</code> com uma senha qualquer e faça um novo deploy.</li>
       <li>No Asaas, em <b>Integrações → Webhooks</b>, cadastre a URL <code>${escH(location.origin)}/api/asaas/webhook</code> com o mesmo token, para cobranças pagas e notas emitidas atualizarem sozinhas.</li>
+    </ol></div>
+  <div class="panel"><div class="panel__head"><h3 class="panel__title">Automação de e-mails (Gmail, Drive e IA)</h3>${(() => { const e = db.integracoes?.emails || {}; return e.google && e.ia ? pill("conectado").replace("pill--", "pill--green ") : pill("não configurado"); })()}</div>
+    <p class="empty">Caixas monitoradas: ${escH((db.integracoes?.emails?.caixas || []).join(", "))} · lembretes saem de ${escH(db.integracoes?.emails?.remetente || "")}</p>
+    <ol class="steps">
+      <li>No <a href="https://console.cloud.google.com" target="_blank" rel="noopener">Google Cloud Console</a>, crie um projeto, ative as APIs <b>Gmail</b> e <b>Google Drive</b>, crie uma <b>conta de serviço</b> e gere uma chave JSON.</li>
+      <li>No <a href="https://admin.google.com" target="_blank" rel="noopener">Admin do Google Workspace</a>, em <b>Segurança → Controles de API → Delegação em todo o domínio</b>, adicione o ID do cliente da conta de serviço com os escopos <code>https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/drive</code>.</li>
+      <li>No Drive de financeiro@, crie a pasta <b>Mantra ERP</b> e copie o ID dela (o final do link).</li>
+      <li>Na Vercel, crie as variáveis <code>GOOGLE_SERVICE_ACCOUNT</code> (conteúdo do JSON), <code>DRIVE_PASTA_RAIZ</code> (ID da pasta), <code>ANTHROPIC_API_KEY</code> e <code>CRON_SECRET</code> (uma senha qualquer), e faça um novo deploy.</li>
     </ol></div>`;
 }
 
@@ -1209,7 +1390,9 @@ const SUBTITULOS = {
   servicos: "Orçamento, horas, custos e rentabilidade por projeto e por cliente.",
   pessoas: "Colaboradores, remuneração, benefícios e documentos.",
   relatorios: "Receita, despesas, inadimplência e resultado por área e por cliente.",
-  aprovacoes: "Aprovações, usuários, permissões, configurações e histórico de alterações.",
+  aprovacoes: "Aprovações, usuários, permissões, configurações, custos de APIs e histórico de alterações.",
+  emails: "Notas fiscais, boletos e contratos que chegam por e-mail, lidos e organizados automaticamente.",
+  influenciadores: "Cadastro de influenciadores, contratos por campanha, NFs e pagamentos.",
 };
 
 /* ---------- Navegação ---------- */
@@ -1219,7 +1402,7 @@ const state2 = { mod: "overview", tab: {} };
 
 function renderRail() {
   document.getElementById("railModules").innerHTML = Object.entries(MODULES).filter(([k]) => can(k)).map(([k, m]) =>
-    `<button class="rail__btn ${state2.mod === k ? "is-active" : ""}" data-mod="${k}" title="${m.label}" aria-label="${m.label}"><svg viewBox="0 0 24 24">${ICON[k]}</svg></button>`).join("");
+    `<button class="rail__btn ${state2.mod === k ? "is-active" : ""}" data-mod="${k}" title="${m.label}" aria-label="${m.label}"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${k === "emails" && emailsNovos() ? `<span class="rail__badge">${emailsNovos()}</span>` : ""}</button>`).join("");
   const u = currentUser();
   const ini = u.nome.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   document.getElementById("userMenu").innerHTML = `<span class="user-avatar" title="${escH(u.nome)} · ${PERFIS[u.perfil].label}">${escH(ini)}</span>
@@ -1291,7 +1474,12 @@ document.getElementById("senhaForm").addEventListener("submit", async (e) => {
 /* ---------- Login ---------- */
 const loginEl = document.getElementById("login");
 function showLogin() { me = null; db = null; loginEl.hidden = false; appEl.hidden = true; document.getElementById("loginEmail").focus(); }
-async function entrar() { await loadData(); loginEl.hidden = true; appEl.hidden = false; renderView(); }
+async function entrar() {
+  await loadData(); loginEl.hidden = true; appEl.hidden = false; renderView();
+  // Lê os e-mails novos em segundo plano (o servidor limita a uma leitura a cada 10 minutos).
+  if (can("emails") && db.integracoes?.emails?.google && db.integracoes?.emails?.ia)
+    apiAction("/api/emails/sincronizar", { auto: true }).then((r) => { if (r.novos) toast(`${r.novos} documento(s) novo(s) chegaram por e-mail`); }).catch(() => {});
+}
 document.getElementById("loginEye").addEventListener("click", (e) => {
   const inp = document.getElementById("loginSenha"), btn = e.currentTarget;
   const mostrar = inp.type === "password";
@@ -1321,6 +1509,7 @@ erpEl.addEventListener("click", (e) => {
   actionRegistry.get(b.dataset.act)?.();
 });
 erpEl.addEventListener("change", (e) => {
+  if (e.target.dataset.emailf) { filtroEmail[e.target.dataset.emailf] = e.target.value; return render(); }
   if (e.target.id === "extratoFile" && e.target.files[0]) importarExtrato(e.target.files[0]).catch((err) => toast(err.message));
 });
 erpEl.addEventListener("input", (e) => {
