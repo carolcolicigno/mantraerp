@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mantra ERP · Projects</title>
+  <title>Mantra ERP</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -16,14 +16,8 @@
       <svg class="rail__logo" width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" aria-label="Mantra">
         <circle cx="10" cy="10" r="6"/><circle cx="18" cy="10" r="6"/><circle cx="10" cy="18" r="6"/><circle cx="18" cy="18" r="6"/>
       </svg>
-      <button class="rail__btn" title="Dashboard"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg></button>
-      <button class="rail__btn is-active" title="Projects"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
-      <button class="rail__btn" title="Calendar"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg></button>
-      <button class="rail__btn" title="Reports"><svg viewBox="0 0 24 24"><path d="M6 20v-6M12 20V6M18 20v-9"/></svg></button>
-      <button class="rail__btn" title="Messages"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
-      <button class="rail__btn" title="Team"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg></button>
-      <button class="rail__btn" title="Notifications"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg></button>
-      <button class="rail__btn" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+      <div id="railModules" class="rail__modules"></div>
+      <select id="userSwitch" class="user-switch" title="Usuário atual"></select>
     </nav>
 
     <!-- Project list -->
@@ -75,7 +69,30 @@
         <div id="board"></div>
       </section>
     </main>
+
+    <!-- ERP modules -->
+    <section class="erp" id="erp" hidden>
+      <header class="erp__header">
+        <div><h1 class="erp__title" id="erpTitle"></h1><p class="crumbs" id="erpCrumbs"></p></div>
+        <div class="erp__headActions" id="erpHeadActions"></div>
+      </header>
+      <div class="erp__tabs tabs" id="erpTabs" role="tablist"></div>
+      <div class="erp__body" id="erpBody"></div>
+    </section>
   </div>
+
+  <dialog id="formDialog" class="dialog">
+    <form method="dialog" id="recordForm">
+      <h2 id="formTitle"></h2>
+      <div class="form-grid" id="formFields"></div>
+      <div class="dialog__actions">
+        <button type="button" class="btn-ghost" id="formCancel">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="app.js"></script>
+  <script src="erp.js"></script>
 </body>
 </html>

@@ -23,7 +23,7 @@ svg.fill { fill: currentColor; stroke: none; }
 .app { display: grid; grid-template-columns: 72px 310px 1fr; height: calc(100vh - 48px); background: var(--surface); border-radius: 32px; overflow: hidden; box-shadow: 0 0 0 12px #f5f6f9; }
 
 /* Rail */
-.rail { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 24px 0; border-right: 1px solid var(--line); }
+.rail { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 0; border-right: 1px solid var(--line); }
 .rail__logo { width: 28px; height: 28px; color: #4a3df5; margin-bottom: 16px; stroke-width: 2.2; }
 .rail__btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: #333; }
 .rail__btn:hover { background: var(--muted-surface); }
@@ -125,4 +125,77 @@ svg.fill { fill: currentColor; stroke: none; }
   .subnav { flex-wrap: wrap; gap: 10px; }
   .tabs { overflow-x: auto; }
   .toolbar { flex-wrap: wrap; gap: 10px; }
+}
+
+/* ===== ERP ===== */
+.rail__modules { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.rail__btn svg { width: 19px; height: 19px; }
+.user-switch { margin-top: auto; width: 56px; font: inherit; font-size: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 2px; background: #fff; }
+.app.erp-mode { grid-template-columns: 72px 1fr; }
+.app.erp-mode .projects, .app.erp-mode .main { display: none; }
+.erp { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.erp[hidden], .erp__tabs[hidden] { display: none; }
+.erp__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 26px 24px 10px; }
+.erp__title { font-size: 26px; font-weight: 600; }
+.erp__headActions { display: flex; gap: 10px; flex-wrap: wrap; }
+.erp__tabs { padding: 0 24px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.erp__tabs button { white-space: nowrap; }
+.erp__body { flex: 1; overflow: auto; background: #f4f5f9; padding: 22px 24px; display: grid; gap: 18px; align-content: start; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.kpi { background: #fff; border-radius: var(--radius); padding: 16px; }
+.kpi__label { font-size: 12px; color: var(--text-2); }
+.kpi__value { font-size: 22px; font-weight: 700; margin-top: 6px; }
+.kpi__hint { font-size: 11px; color: var(--text-2); margin-top: 4px; }
+.pos { color: #1c8a2b; } .neg { color: #c62828; }
+
+.panel { background: #fff; border-radius: var(--radius); padding: 16px; overflow-x: auto; }
+.panel__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.panel__title { font-size: 15px; font-weight: 600; }
+.panel .table { border-radius: 0; }
+.table td.num, .table th.num { text-align: right; white-space: nowrap; }
+.table tr:last-child td { border-bottom: 0; }
+.row-actions { display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; }
+.row-actions button { font-size: 12px; padding: 4px 8px; border-radius: 8px; background: var(--muted-surface); }
+.row-actions button.ok { background: #e3f6e6; color: #1c6b27; }
+.row-actions button.no { background: #fde8e8; color: #a61b1b; }
+.row-actions button.main { background: #e6ebfe; color: var(--accent); }
+.pill { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--muted-surface); white-space: nowrap; }
+.pill--green { background: #e3f6e6; color: #1c6b27; } .pill--red { background: #fde8e8; color: #a61b1b; }
+.pill--yellow { background: #fff4d6; color: #7a5a00; } .pill--blue { background: #e6ebfe; color: #1f3bb8; }
+.pill--purple { background: #ece7fb; color: #4b2a8a; }
+.empty { color: var(--text-2); font-size: 13px; padding: 12px 0; }
+.filter-input { border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; min-width: 200px; }
+
+.bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; align-items: end; height: 180px; }
+.bars__group { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+.bars__pair { display: flex; gap: 4px; align-items: flex-end; height: 100%; }
+.bars__pair i { width: 14px; border-radius: 4px 4px 0 0; display: block; }
+.bars__in { background: #3cc04b; } .bars__out { background: #f26b1d; }
+.bars__label { font-size: 11px; color: var(--text-2); }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+.meter { height: 6px; background: var(--muted-surface); border-radius: 99px; overflow: hidden; min-width: 80px; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
+.matrix td { text-align: center; }
+.matrix td:first-child { text-align: left; }
+
+.dialog { border: 0; border-radius: 20px; padding: 24px; width: min(560px, calc(100vw - 32px)); }
+.dialog::backdrop { background: rgba(18,18,30,.35); }
+.dialog h2 { font-size: 20px; margin-bottom: 16px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid label { display: grid; gap: 4px; font-size: 12px; color: var(--text-2); }
+.form-grid label.full { grid-column: 1 / -1; }
+.form-grid input, .form-grid select { font: inherit; font-size: 14px; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.form-grid input[type=checkbox] { justify-self: start; width: 18px; height: 18px; }
+.dialog__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #121212; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 13px; z-index: 10; }
+
+@media (max-width: 1000px) {
+  .app.erp-mode { grid-template-columns: 1fr; }
+  .rail__modules { flex-direction: row; }
+  .user-switch { margin: 0; }
+  .erp__header, .erp__body { padding-left: 16px; padding-right: 16px; }
+  .form-grid { grid-template-columns: 1fr; }
 }
