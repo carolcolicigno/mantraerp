@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "description": "ERP da agência Mantra — financeiro, faturamento, compras, vendas, contratos, projetos, pessoas e relatórios.",
-  "engines": { "node": ">=22.5" },
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning server/server.js"
+  },
+  "dependencies": {
+    "pg": "^8.16.0"
   }
 }
