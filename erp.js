@@ -1,8 +1,7 @@
 /* Mantra ERP — módulos de gestão da agência.
-   Dados ficam no localStorage do navegador (chave DB_KEY). */
+   Os dados vêm da API (server/server.js); alterações são sincronizadas automaticamente. */
 
 const TODAY = new Date().toISOString().slice(0, 10);
-const DB_KEY = "mantra-erp-v1";
 
 const BRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtDate = (d) => (d ? d.split("-").reverse().join("/") : "—");
@@ -13,102 +12,59 @@ const monthLabel = (key) => new Date(key + "-15T12:00:00").toLocaleDateString("p
 const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const escH = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-/* ---------- Dados iniciais ---------- */
-const m = (n, day = 10) => addMonths(TODAY.slice(0, 8) + String(day).padStart(2, "0"), n);
-const SEED = {
-  usuarios: [
-    { id: "u1", nome: "Carol Colicigno", email: "carol@mantra.ag", perfil: "admin" },
-    { id: "u2", nome: "Rafael Lima", email: "rafael@mantra.ag", perfil: "financeiro" },
-    { id: "u3", nome: "Bia Santos", email: "bia@mantra.ag", perfil: "gestor" },
-    { id: "u4", nome: "Leo Prado", email: "leo@mantra.ag", perfil: "colaborador" },
-  ],
-  clientes: [
-    { id: "c1", nome: "Natura", cnpj: "71.673.990/0001-77", contato: "marketing@natura.com", segmento: "Cosméticos" },
-    { id: "c2", nome: "Vivo", cnpj: "02.558.157/0001-62", contato: "brand@vivo.com.br", segmento: "Telecom" },
-    { id: "c3", nome: "Havaianas", cnpj: "61.079.117/0001-05", contato: "mkt@havaianas.com", segmento: "Moda" },
-    { id: "c4", nome: "Nubank", cnpj: "18.236.120/0001-58", contato: "brand@nubank.com.br", segmento: "Financeiro" },
-  ],
-  fornecedores: [
-    { id: "f1", nome: "Studio Lumen (produtora)", cnpj: "11.222.333/0001-44", contato: "contato@lumen.tv", categoria: "Produção" },
-    { id: "f2", nome: "Meta Ads", cnpj: "13.347.016/0001-17", contato: "ads@meta.com", categoria: "Mídia" },
-    { id: "f3", nome: "Adobe", cnpj: "02.343.442/0001-41", contato: "br@adobe.com", categoria: "Software" },
-  ],
-  contas: [
-    { id: "a1", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-2), status: "pago", conciliado: true, aprovado: true },
-    { id: "a2", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-1), status: "pago", conciliado: true, aprovado: true },
-    { id: "a3", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(0, 5), status: "aberto", conciliado: false, aprovado: true },
-    { id: "a4", tipo: "receber", descricao: "Campanha Verão", parceiro: "Havaianas", categoria: "Projeto", valor: 82000, vencimento: m(-1, 20), status: "aberto", conciliado: false, aprovado: true },
-    { id: "a5", tipo: "receber", descricao: "Fee mensal Vivo", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(0, 25), status: "aberto", conciliado: false, aprovado: true },
-    { id: "a6", tipo: "receber", descricao: "Fee mensal Vivo", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(-1, 25), status: "pago", conciliado: false, aprovado: true },
-    { id: "a7", tipo: "receber", descricao: "Lançamento cartão", parceiro: "Nubank", categoria: "Projeto", valor: 120000, vencimento: m(1, 15), status: "aberto", conciliado: false, aprovado: true },
-    { id: "a15", tipo: "receber", descricao: "Campanha Verão — 1ª parcela", parceiro: "Havaianas", categoria: "Projeto", valor: 82000, vencimento: m(-2, 20), status: "pago", conciliado: true, aprovado: true },
-    { id: "a16", tipo: "receber", descricao: "Fee mensal Vivo", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(-2, 25), status: "pago", conciliado: true, aprovado: true },
-    { id: "a17", tipo: "receber", descricao: "Lançamento cartão — sinal", parceiro: "Nubank", categoria: "Projeto", valor: 60000, vencimento: m(-1, 8), status: "pago", conciliado: false, aprovado: true },
-    { id: "a8", tipo: "pagar", descricao: "Produção filme Verão", parceiro: "Studio Lumen (produtora)", categoria: "Produção", valor: 54000, vencimento: m(0, 18), status: "aberto", conciliado: false, aprovado: false },
-    { id: "a9", tipo: "pagar", descricao: "Mídia paga Vivo", parceiro: "Meta Ads", categoria: "Mídia", valor: 22000, vencimento: m(-1, 28), status: "pago", conciliado: true, aprovado: true },
-    { id: "a10", tipo: "pagar", descricao: "Licenças Creative Cloud", parceiro: "Adobe", categoria: "Software", valor: 4800, vencimento: m(0, 2), status: "aberto", conciliado: false, aprovado: true },
-    { id: "a11", tipo: "pagar", descricao: "Aluguel escritório", parceiro: "Imobiliária Paulista", categoria: "Estrutura", valor: 18000, vencimento: m(-1, 5), status: "pago", conciliado: true, aprovado: true },
-    { id: "a12", tipo: "pagar", descricao: "Aluguel escritório", parceiro: "Imobiliária Paulista", categoria: "Estrutura", valor: 18000, vencimento: m(0, 5), status: "pago", conciliado: false, aprovado: true },
-    { id: "a13", tipo: "pagar", descricao: "Folha de pagamento", parceiro: "Colaboradores", categoria: "Pessoal", valor: 96000, vencimento: m(-1, 5), status: "pago", conciliado: true, aprovado: true },
-    { id: "a14", tipo: "pagar", descricao: "Folha de pagamento", parceiro: "Colaboradores", categoria: "Pessoal", valor: 96000, vencimento: m(0, 5), status: "pago", conciliado: true, aprovado: true },
-  ],
-  notas: [
-    { id: "n1", numero: "000231", cliente: "Natura", valor: 45000, emissao: m(-2, 1), status: "emitida", contabilidade: true },
-    { id: "n2", numero: "000232", cliente: "Natura", valor: 45000, emissao: m(-1, 1), status: "emitida", contabilidade: true },
-    { id: "n3", numero: "000233", cliente: "Vivo", valor: 38000, emissao: m(-1, 10), status: "emitida", contabilidade: false },
-    { id: "n4", numero: "000234", cliente: "Havaianas", valor: 82000, emissao: m(-1, 12), status: "emitida", contabilidade: false },
-  ],
-  compras: [
-    { id: "p1", item: "Banco de imagens (anual)", fornecedor: "Adobe", solicitante: "Bia Santos", valor: 6200, cotacoes: 3, status: "cotação" },
-    { id: "p2", item: "Notebooks para direção de arte (2x)", fornecedor: "", solicitante: "Leo Prado", valor: 28000, cotacoes: 0, status: "solicitado" },
-    { id: "p3", item: "Captação drone campanha Verão", fornecedor: "Studio Lumen (produtora)", solicitante: "Bia Santos", valor: 9500, cotacoes: 2, status: "aprovado" },
-  ],
-  propostas: [
-    { id: "v1", cliente: "Nubank", titulo: "Lançamento cartão Ultravioleta", valor: 120000, data: m(-1, 3), status: "pedido" },
-    { id: "v2", cliente: "Havaianas", titulo: "Campanha Inverno", valor: 95000, data: m(0, 2), status: "enviada" },
-    { id: "v3", cliente: "Vivo", titulo: "Ativação festival", valor: 64000, data: m(0, 6), status: "rascunho" },
-    { id: "v4", cliente: "Natura", titulo: "Social always-on 2027", valor: 300000, data: m(-1, 20), status: "aprovada" },
-  ],
-  contratos: [
-    { id: "k1", cliente: "Natura", objeto: "Fee de conta — branding e social", valorMensal: 45000, inicio: m(-9, 1), fim: m(3, 1), reajuste: 4.5, indice: "IPCA" },
-    { id: "k2", cliente: "Vivo", objeto: "Fee de conta — performance", valorMensal: 38000, inicio: m(-14, 1), fim: m(10, 1), reajuste: 5, indice: "IGP-M" },
-    { id: "k3", cliente: "Havaianas", objeto: "Projeto campanha Verão", valorMensal: 41000, inicio: m(-4, 1), fim: m(-1, 1), reajuste: 0, indice: "—" },
-  ],
-  projetos: [
-    { id: "j1", nome: "CreativeSync Hub", cliente: "Natura", orcamento: 180000, custoTerceiros: 32000, horas: 640, valorHora: 140 },
-    { id: "j2", nome: "Campanha Verão", cliente: "Havaianas", orcamento: 164000, custoTerceiros: 63500, horas: 520, valorHora: 140 },
-    { id: "j3", nome: "Performance Q4", cliente: "Vivo", orcamento: 114000, custoTerceiros: 22000, horas: 410, valorHora: 140 },
-    { id: "j4", nome: "Cartão Ultravioleta", cliente: "Nubank", orcamento: 120000, custoTerceiros: 15000, horas: 180, valorHora: 140 },
-  ],
-  colaboradores: [
-    { id: "e1", nome: "Carol Colicigno", cargo: "Diretora", area: "Diretoria", salario: 28000, beneficios: 3200, admissao: "2019-02-01" },
-    { id: "e2", nome: "Bia Santos", cargo: "Gerente de projetos", area: "Atendimento", salario: 14000, beneficios: 2100, admissao: "2021-05-10" },
-    { id: "e3", nome: "Leo Prado", cargo: "Diretor de arte", area: "Criação", salario: 11000, beneficios: 1900, admissao: "2022-08-01" },
-    { id: "e4", nome: "Rafael Lima", cargo: "Analista financeiro", area: "Financeiro", salario: 9000, beneficios: 1700, admissao: "2023-01-16" },
-    { id: "e5", nome: "Ana Kim", cargo: "Redatora", area: "Criação", salario: 8500, beneficios: 1700, admissao: "2023-09-04" },
-    { id: "e6", nome: "Tiago Reis", cargo: "Analista de mídia", area: "Mídia", salario: 9500, beneficios: 1700, admissao: "2024-03-11" },
-  ],
-  historico: [],
-};
+/* ---------- Comunicação com o servidor ---------- */
+const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config"];
+let db = null;
+let me = null;
+let synced = {};
+let pendingLog = null;
+let syncChain = Promise.resolve();
 
-/* ---------- Persistência e histórico ---------- */
-let db = loadDb();
-function loadDb() {
-  try { const s = JSON.parse(localStorage.getItem(DB_KEY)); if (s && s.contas) return s; } catch {}
-  return structuredClone(SEED);
+async function apiFetch(url, body) {
+  const init = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-Mantra": "1" }, body: JSON.stringify(body) };
+  const r = await fetch(url, { credentials: "same-origin", ...init });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && url !== "/api/login") showLogin();
+  if (!r.ok) throw new Error(j.erro || "Falha de comunicação com o servidor");
+  return j;
 }
-function save() { try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch {} }
-let currentUserId = (() => { try { return localStorage.getItem(DB_KEY + ":user") || "u1"; } catch { return "u1"; } })();
-const currentUser = () => db.usuarios.find((u) => u.id === currentUserId) || db.usuarios[0];
-function log(acao, detalhe) {
-  const now = new Date();
-  db.historico.unshift({ id: uid(), quando: now.toLocaleString("pt-BR"), usuario: currentUser().nome, acao, detalhe });
-  db.historico = db.historico.slice(0, 300);
-  save();
+function snapshot() {
+  synced = Object.fromEntries(SYNC_COLS.map((c) => [c, new Map((db[c] || []).map((r) => [r.id, JSON.stringify(r)]))]));
 }
+async function loadData() { db = await apiFetch("/api/data"); snapshot(); }
+
+// Compara o estado local com o último sincronizado e envia só o que mudou.
+function save() {
+  if (!db) return;
+  const changes = [];
+  for (const col of SYNC_COLS) {
+    const prev = synced[col] || new Map();
+    const cur = new Map();
+    for (const r of db[col] || []) {
+      let data = r;
+      if (col === "usuarios" && r.senha) { data = { ...r }; delete r.senha; }
+      const s = JSON.stringify(r);
+      cur.set(r.id, s);
+      if (prev.get(r.id) !== s || data !== r) changes.push({ op: "put", col, id: r.id, data });
+    }
+    for (const id of prev.keys()) if (!cur.has(id)) changes.push({ op: "delete", col, id });
+    synced[col] = cur;
+  }
+  const lg = pendingLog; pendingLog = null;
+  if (!changes.length && !lg) return;
+  syncChain = syncChain
+    .then(() => apiFetch("/api/sync", { changes, ...(lg || {}) }))
+    .then((r) => { if (r.historico && hasHist()) { db.historico.unshift(r.historico); if (state2.tab.aprovacoes === "Histórico de alterações" && state2.mod === "aprovacoes") renderView(); } })
+    .catch(async (e) => { toast(e.message); await loadData().catch(() => {}); renderView(); });
+}
+const hasHist = () => Array.isArray(db.historico) && can("aprovacoes");
+const currentUser = () => me;
+const cfg = () => db.config?.[0] || { id: "geral", regime: "Simples Nacional", aliquota: 11.33, encargos: 68 };
+const encargo = () => 1 + (Number(cfg().encargos) || 0) / 100;
+function log(acao, detalhe) { pendingLog = { acao, detalhe }; queueMicrotask(save); }
 function toast(msg) {
   const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
-  document.body.appendChild(t); setTimeout(() => t.remove(), 2200);
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
 }
 
 /* ---------- Permissões ---------- */
@@ -189,6 +145,7 @@ const SCHEMAS = {
   usuarios: { singular: "Usuário", fields: [
     { k: "nome", label: "Nome" }, { k: "email", label: "E-mail" },
     { k: "perfil", label: "Perfil", type: "select", options: Object.keys(PERFIS) },
+    { k: "senha", label: "Senha (mín. 8; em branco mantém a atual)", type: "password" },
   ] },
 };
 
@@ -209,8 +166,9 @@ function openForm(col, record, defaults = {}) {
     } else if (f.type === "bool") {
       input = `<input type="checkbox" name="${f.k}" ${v ? "checked" : ""} />`;
     } else {
-      const t = f.type === "date" ? "date" : f.type === "money" || f.type === "number" ? "number" : "text";
-      input = `<input type="${t}" name="${f.k}" value="${escH(v)}" ${t === "number" ? 'step="any"' : ""} ${f.type !== "bool" && f.k !== "fornecedor" ? "required" : ""} />`;
+      const t = f.type === "date" ? "date" : f.type === "money" || f.type === "number" ? "number" : f.type === "password" ? "password" : "text";
+      const req = f.type === "password" ? (record ? "" : "required") : "required";
+      input = `<input type="${t}" name="${f.k}" value="${t === "password" ? "" : escH(v)}" ${t === "number" ? 'step="any"' : ""} ${t === "password" ? 'minlength="8" autocomplete="new-password"' : ""} ${req} />`;
     }
     return `<label class="${f.full ? "full" : ""}">${f.label}${input}</label>`;
   }).join("");
@@ -224,6 +182,7 @@ document.getElementById("recordForm").addEventListener("submit", (e) => {
   for (const f of SCHEMAS[col].fields) {
     if (f.type === "bool") data[f.k] = fd.has(f.k);
     else if (f.type === "money" || f.type === "number") data[f.k] = Number(fd.get(f.k)) || 0;
+    else if (f.type === "password") { const v = String(fd.get(f.k) || ""); if (v) data[f.k] = v; }
     else data[f.k] = String(fd.get(f.k) ?? "").trim();
   }
   if (id) {
@@ -302,7 +261,7 @@ function fluxoMeses(from = -3, to = 2) {
 const receber = () => db.contas.filter((c) => c.tipo === "receber");
 const pagar = () => db.contas.filter((c) => c.tipo === "pagar");
 const inadimplentes = () => receber().filter((c) => contaStatus(c) === "atrasado");
-const folhaMensal = () => sum(db.colaboradores, (e) => e.salario * 1.68 + e.beneficios); // ~68% de encargos (CLT)
+const folhaMensal = () => sum(db.colaboradores, (e) => e.salario * encargo() + e.beneficios);
 
 function bars(meses) {
   const max = Math.max(1, ...meses.flatMap((x) => [x.ent, x.sai]));
@@ -356,7 +315,7 @@ function exportarCSV(nome, header, rows) {
   const csv = [header, ...rows].map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(";")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
-  a.download = nome; a.click(); URL.revokeObjectURL(a.href);
+  a.download = nome; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   log("Exportação", nome);
 }
 
@@ -412,6 +371,7 @@ const MODULES = {
   aprovacoes: { label: "Aprovações e acessos", tabs: {
     "Aprovações pendentes": renderAprovacoes,
     "Usuários e permissões": renderUsuarios,
+    "Configurações": renderConfig,
     "Histórico de alterações": () => table({ title: "Histórico de alterações", rows: db.historico,
       cols: [{ label: "Quando", get: txt("quando") }, { label: "Usuário", get: txt("usuario") }, { label: "Ação", get: (r) => pill(r.acao) }, { label: "Detalhe", get: txt("detalhe") }] }),
   } },
@@ -487,7 +447,7 @@ function renderFaturamento() {
   return `<div class="kpis">
     ${kpi("Faturado no mês", BRL(sum(mes, (n) => n.valor)), `${mes.length} notas`)}
     ${kpi("Faturado (total)", BRL(sum(emitidas, (n) => n.valor)), `${emitidas.length} notas emitidas`)}
-    ${kpi("Impostos estimados", BRL(sum(emitidas, (n) => n.valor) * 0.1133), "Simples/Presumido ~11,33%")}
+    ${kpi("Impostos estimados", BRL(sum(emitidas, (n) => n.valor) * (cfg().aliquota / 100)), `${escH(cfg().regime)} · ${String(cfg().aliquota).replace(".", ",")}%`)}
     ${kpi("Pendentes p/ contabilidade", pendCont.length, "", pendCont.length ? "neg" : "pos")}
   </div>` +
   table({ title: "Notas fiscais de serviço", rows: [...db.notas].sort((a, b) => b.numero.localeCompare(a.numero)), addCol: "notas", addDefaults: { emissao: TODAY, status: "emitida" },
@@ -561,13 +521,13 @@ function renderPessoas() {
     ${kpi("Colaboradores", db.colaboradores.length)}
     ${kpi("Salários", BRL(sum(db.colaboradores, (e) => e.salario)))}
     ${kpi("Benefícios", BRL(sum(db.colaboradores, (e) => e.beneficios)))}
-    ${kpi("Custo total da folha", BRL(folha), "com ~68% de encargos CLT")}
+    ${kpi("Custo total da folha", BRL(folha), `com ${cfg().encargos}% de encargos`)}
   </div>` + table({ title: "Colaboradores", rows: db.colaboradores, addCol: "colaboradores", addDefaults: { admissao: TODAY, area: "Criação" },
     extra: `<button class="btn-ghost" data-act="${reg(() => exportarCSV(`folha-${monthKey(TODAY)}.csv`, ["Nome", "Cargo", "Área", "Salário", "Benefícios", "Admissão"], db.colaboradores.map((e) => [e.nome, e.cargo, e.area, e.salario.toFixed(2), e.beneficios.toFixed(2), fmtDate(e.admissao)])))}">Exportar p/ folha (CSV)</button>`,
     cols: [{ label: "Nome", get: txt("nome") }, { label: "Cargo", get: txt("cargo") }, { label: "Área", get: (r) => pill(r.area) }, { label: "Admissão", get: date("admissao") },
-      { label: "Salário", get: money("salario"), num: true }, { label: "Benefícios", get: money("beneficios"), num: true }, { label: "Custo mensal", num: true, get: (r) => BRL(r.salario * 1.68 + r.beneficios) }],
+      { label: "Salário", get: money("salario"), num: true }, { label: "Benefícios", get: money("beneficios"), num: true }, { label: "Custo mensal", num: true, get: (r) => BRL(r.salario * encargo() + r.beneficios) }],
     actions: editDel("colaboradores") }) +
-  table({ title: "Custo por área", filter: false, rows: areas.map((a) => { const l = db.colaboradores.filter((e) => e.area === a); return { area: a, n: l.length, custo: sum(l, (e) => e.salario * 1.68 + e.beneficios) }; }),
+  table({ title: "Custo por área", filter: false, rows: areas.map((a) => { const l = db.colaboradores.filter((e) => e.area === a); return { area: a, n: l.length, custo: sum(l, (e) => e.salario * encargo() + e.beneficios) }; }),
     cols: [{ label: "Área", get: txt("area") }, { label: "Pessoas", get: (r) => r.n, num: true }, { label: "Custo mensal", get: money("custo"), num: true }] });
 }
 
@@ -621,6 +581,28 @@ function renderUsuarios() {
     <tr><td>Aprovar despesas e compras</td>${Object.values(PERFIS).map((p) => `<td>${p.aprova ? "✓" : "—"}</td>`).join("")}</tr></tbody></table></div>`;
 }
 
+const REGIMES = { "Simples Nacional": 11.33, "Lucro Presumido": 16.33, "Lucro Real": 21.25 };
+function renderConfig() {
+  if (currentUser().perfil !== "admin") return `<div class="panel empty">Somente administradores podem alterar as configurações.</div>`;
+  const c = cfg();
+  const salvar = reg(() => {
+    const regime = document.getElementById("cfgRegime").value;
+    const aliquota = Number(document.getElementById("cfgAliquota").value) || 0;
+    const encargos = Number(document.getElementById("cfgEncargos").value) || 0;
+    db.config = [{ ...c, regime, aliquota, encargos }];
+    log("Configuração", `${regime}: impostos ${aliquota}% · encargos ${encargos}%`); toast("Configurações salvas"); render();
+  });
+  const sugerir = reg(() => { const r = document.getElementById("cfgRegime").value; document.getElementById("cfgAliquota").value = REGIMES[r]; });
+  return `<div class="panel"><div class="panel__head"><h3 class="panel__title">Tributação e folha</h3></div>
+    <div class="form-grid" style="max-width:640px">
+      <label>Regime tributário<select id="cfgRegime">${Object.keys(REGIMES).map((r) => `<option ${r === c.regime ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+      <label>Alíquota total sobre faturamento (%)<input id="cfgAliquota" type="number" step="0.01" min="0" max="100" value="${c.aliquota}" /></label>
+      <label>Encargos sobre salários (%)<input id="cfgEncargos" type="number" step="0.1" min="0" max="200" value="${c.encargos}" /></label>
+    </div>
+    <p class="empty">Alíquotas sugeridas: Simples Nacional 11,33% (Anexo III, faixa inicial), Lucro Presumido 16,33% (PIS, COFINS, IRPJ, CSLL e ISS 5%), Lucro Real ~21,25%. Confirme com a contabilidade.</p>
+    <div class="dialog__actions" style="justify-content:flex-start"><button class="btn-ghost" data-act="${sugerir}">Usar alíquota sugerida</button><button class="btn-primary" data-act="${salvar}">Salvar</button></div></div>`;
+}
+
 /* ---------- Navegação ---------- */
 const appEl = document.querySelector(".app");
 const erpEl = document.getElementById("erp");
@@ -629,11 +611,16 @@ const state2 = { mod: "overview", tab: {} };
 function renderRail() {
   document.getElementById("railModules").innerHTML = Object.entries(MODULES).filter(([k]) => can(k)).map(([k, m]) =>
     `<button class="rail__btn ${state2.mod === k ? "is-active" : ""}" data-mod="${k}" title="${m.label}" aria-label="${m.label}"><svg viewBox="0 0 24 24">${ICON[k]}</svg></button>`).join("");
-  document.getElementById("userSwitch").innerHTML = db.usuarios.map((u) => `<option value="${u.id}" ${u.id === currentUser().id ? "selected" : ""}>${escH(u.nome.split(" ")[0])} · ${PERFIS[u.perfil]?.label || u.perfil}</option>`).join("");
+  const u = currentUser();
+  const ini = u.nome.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  document.getElementById("userMenu").innerHTML = `<span class="user-avatar" title="${escH(u.nome)} · ${PERFIS[u.perfil].label}">${escH(ini)}</span>
+    <button class="rail__btn" id="btnSenha" title="Trocar senha" aria-label="Trocar senha"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3"/></svg></button>
+    <button class="rail__btn" id="btnSair" title="Sair" aria-label="Sair"><svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/></svg></button>`;
 }
 
-function render() {
-  save();
+function render() { save(); renderView(); }
+function renderView() {
+  if (!db || !me) return;
   if (!can(state2.mod)) state2.mod = Object.keys(MODULES).find(can);
   renderRail();
   const mod = MODULES[state2.mod];
@@ -645,7 +632,8 @@ function render() {
   document.getElementById("erpTitle").textContent = mod.label;
   document.getElementById("erpCrumbs").textContent = `Mantra ERP / ${mod.label} · ${currentUser().nome} (${PERFIS[currentUser().perfil].label})`;
   document.getElementById("erpHeadActions").innerHTML = state2.mod === "overview"
-    ? `<button class="btn-ghost" data-act="${reg(() => { if (confirm("Restaurar os dados de exemplo? Tudo que foi cadastrado será apagado.")) { db = structuredClone(SEED); log("Restauração", "Dados de exemplo restaurados"); render(); } })}">Restaurar dados de exemplo</button>` : "";
+  && currentUser().perfil === "admin"
+    ? `<button class="btn-ghost" data-act="${reg(async () => { if (confirm("Restaurar os dados de exemplo? Todos os registros (exceto usuários) serão apagados.")) { try { await syncChain; await apiFetch("/api/reset", {}); await loadData(); toast("Dados de exemplo restaurados"); renderView(); } catch (e) { toast(e.message); } } })}">Restaurar dados de exemplo</button>` : "";
   const tabsEl = document.getElementById("erpTabs");
   if (mod.tabs) {
     const names = Object.keys(mod.tabs);
@@ -664,11 +652,36 @@ document.getElementById("railModules").addEventListener("click", (e) => {
   const b = e.target.closest("[data-mod]"); if (!b) return;
   state2.mod = b.dataset.mod; render();
 });
-document.getElementById("userSwitch").addEventListener("change", (e) => {
-  currentUserId = e.target.value;
-  try { localStorage.setItem(DB_KEY + ":user", currentUserId); } catch {}
-  log("Troca de usuário", currentUser().nome); render();
+document.getElementById("userMenu").addEventListener("click", async (e) => {
+  if (e.target.closest("#btnSair")) {
+    await syncChain.catch(() => {});
+    await apiFetch("/api/logout", {}).catch(() => {});
+    location.reload();
+  }
+  if (e.target.closest("#btnSenha")) { document.getElementById("senhaForm").reset(); document.getElementById("senhaDialog").showModal(); }
 });
+document.getElementById("senhaCancel").addEventListener("click", () => document.getElementById("senhaDialog").close());
+document.getElementById("senhaForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  if (fd.get("nova") !== fd.get("confirma")) return toast("As senhas novas não conferem");
+  try { await apiFetch("/api/senha", { atual: fd.get("atual"), nova: fd.get("nova") }); document.getElementById("senhaDialog").close(); toast("Senha alterada"); }
+  catch (err) { toast(err.message); }
+});
+
+/* ---------- Login ---------- */
+const loginEl = document.getElementById("login");
+function showLogin() { me = null; db = null; loginEl.hidden = false; appEl.hidden = true; document.getElementById("loginEmail").focus(); }
+async function entrar() { await loadData(); loginEl.hidden = true; appEl.hidden = false; renderView(); }
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const err = document.getElementById("loginErro");
+  err.textContent = "";
+  try { me = (await apiFetch("/api/login", { email: fd.get("email"), senha: fd.get("senha") })).usuario; await entrar(); }
+  catch (ex) { err.textContent = ex.message; }
+});
+
 document.getElementById("erpTabs").addEventListener("click", (e) => {
   const b = e.target.closest("[data-tab]"); if (!b) return;
   state2.tab[state2.mod] = b.dataset.tab; render();
@@ -685,4 +698,7 @@ erpEl.addEventListener("input", (e) => {
   if (again) { again.focus(); again.setSelectionRange(pos, pos); }
 });
 
-render();
+(async () => {
+  try { me = (await apiFetch("/api/me")).usuario; await entrar(); }
+  catch { showLogin(); }
+})();

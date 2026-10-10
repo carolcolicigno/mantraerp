@@ -10,14 +10,28 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
+  <div class="login" id="login" hidden>
+    <form class="login__card" id="loginForm">
+      <svg class="rail__logo" width="36" height="36" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+        <circle cx="10" cy="10" r="6"/><circle cx="18" cy="10" r="6"/><circle cx="10" cy="18" r="6"/><circle cx="18" cy="18" r="6"/>
+      </svg>
+      <h1>Mantra ERP</h1>
+      <p class="crumbs">Entre com seu e-mail da agência</p>
+      <label>E-mail<input id="loginEmail" name="email" type="email" autocomplete="username" required /></label>
+      <label>Senha<input name="senha" type="password" autocomplete="current-password" required /></label>
+      <p class="login__erro" id="loginErro" role="alert"></p>
+      <button class="btn-primary" type="submit">Entrar</button>
+    </form>
+  </div>
+
+  <div class="app" hidden>
     <!-- Icon rail -->
     <nav class="rail" aria-label="Main">
       <svg class="rail__logo" width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" aria-label="Mantra">
         <circle cx="10" cy="10" r="6"/><circle cx="18" cy="10" r="6"/><circle cx="10" cy="18" r="6"/><circle cx="18" cy="18" r="6"/>
       </svg>
       <div id="railModules" class="rail__modules"></div>
-      <select id="userSwitch" class="user-switch" title="Usuário atual"></select>
+      <div id="userMenu" class="user-menu"></div>
     </nav>
 
     <!-- Project list -->
@@ -87,6 +101,21 @@
       <div class="form-grid" id="formFields"></div>
       <div class="dialog__actions">
         <button type="button" class="btn-ghost" id="formCancel">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="senhaDialog" class="dialog">
+    <form id="senhaForm">
+      <h2>Trocar senha</h2>
+      <div class="form-grid">
+        <label class="full">Senha atual<input name="atual" type="password" autocomplete="current-password" required /></label>
+        <label>Nova senha<input name="nova" type="password" minlength="8" autocomplete="new-password" required /></label>
+        <label>Confirmar nova senha<input name="confirma" type="password" minlength="8" autocomplete="new-password" required /></label>
+      </div>
+      <div class="dialog__actions">
+        <button type="button" class="btn-ghost" id="senhaCancel">Cancelar</button>
         <button type="submit" class="btn-primary">Salvar</button>
       </div>
     </form>

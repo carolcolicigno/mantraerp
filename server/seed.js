@@ -1,0 +1,79 @@
+// Dados de exemplo usados na primeira inicialização (ou em "Restaurar dados de exemplo").
+const TODAY = new Date().toISOString().slice(0, 10);
+const addMonths = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); };
+const m = (n, day = 10) => addMonths(TODAY.slice(0, 8) + String(day).padStart(2, "0"), n);
+
+module.exports = () => ({
+  usuarios: [
+    { id: "u1", nome: "Carol Colicigno", email: "carol@mantra.ag", perfil: "admin" },
+    { id: "u2", nome: "Rafael Lima", email: "rafael@mantra.ag", perfil: "financeiro" },
+    { id: "u3", nome: "Bia Santos", email: "bia@mantra.ag", perfil: "gestor" },
+    { id: "u4", nome: "Leo Prado", email: "leo@mantra.ag", perfil: "colaborador" },
+  ],
+  clientes: [
+    { id: "c1", nome: "Natura", cnpj: "71.673.990/0001-77", contato: "marketing@natura.com", segmento: "Cosméticos" },
+    { id: "c2", nome: "Vivo", cnpj: "02.558.157/0001-62", contato: "brand@vivo.com.br", segmento: "Telecom" },
+    { id: "c3", nome: "Havaianas", cnpj: "61.079.117/0001-05", contato: "mkt@havaianas.com", segmento: "Moda" },
+    { id: "c4", nome: "Nubank", cnpj: "18.236.120/0001-58", contato: "brand@nubank.com.br", segmento: "Financeiro" },
+  ],
+  fornecedores: [
+    { id: "f1", nome: "Studio Lumen (produtora)", cnpj: "11.222.333/0001-44", contato: "contato@lumen.tv", categoria: "Produção" },
+    { id: "f2", nome: "Meta Ads", cnpj: "13.347.016/0001-17", contato: "ads@meta.com", categoria: "Mídia" },
+    { id: "f3", nome: "Adobe", cnpj: "02.343.442/0001-41", contato: "br@adobe.com", categoria: "Software" },
+  ],
+  contas: [
+    { id: "a1", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-2), status: "pago", conciliado: true, aprovado: true },
+    { id: "a2", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-1), status: "pago", conciliado: true, aprovado: true },
+    { id: "a3", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(0, 5), status: "aberto", conciliado: false, aprovado: true },
+    { id: "a4", tipo: "receber", descricao: "Campanha Verão", parceiro: "Havaianas", categoria: "Projeto", valor: 82000, vencimento: m(-1, 20), status: "aberto", conciliado: false, aprovado: true },
+    { id: "a5", tipo: "receber", descricao: "Fee mensal Vivo", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(0, 25), status: "aberto", conciliado: false, aprovado: true },
+    { id: "a6", tipo: "receber", descricao: "Fee mensal Vivo", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(-1, 25), status: "pago", conciliado: false, aprovado: true },
+    { id: "a7", tipo: "receber", descricao: "Lançamento cartão", parceiro: "Nubank", categoria: "Projeto", valor: 120000, vencimento: m(1, 15), status: "aberto", conciliado: false, aprovado: true },
+    { id: "a15", tipo: "receber", descricao: "Campanha Verão — 1ª parcela", parceiro: "Havaianas", categoria: "Projeto", valor: 82000, vencimento: m(-2, 20), status: "pago", conciliado: true, aprovado: true },
+    { id: "a16", tipo: "receber", descricao: "Fee mensal Vivo", parceiro: "Vivo", categoria: "Fee", valor: 38000, vencimento: m(-2, 25), status: "pago", conciliado: true, aprovado: true },
+    { id: "a17", tipo: "receber", descricao: "Lançamento cartão — sinal", parceiro: "Nubank", categoria: "Projeto", valor: 60000, vencimento: m(-1, 8), status: "pago", conciliado: false, aprovado: true },
+    { id: "a8", tipo: "pagar", descricao: "Produção filme Verão", parceiro: "Studio Lumen (produtora)", categoria: "Produção", valor: 54000, vencimento: m(0, 18), status: "aberto", conciliado: false, aprovado: false },
+    { id: "a9", tipo: "pagar", descricao: "Mídia paga Vivo", parceiro: "Meta Ads", categoria: "Mídia", valor: 22000, vencimento: m(-1, 28), status: "pago", conciliado: true, aprovado: true },
+    { id: "a10", tipo: "pagar", descricao: "Licenças Creative Cloud", parceiro: "Adobe", categoria: "Software", valor: 4800, vencimento: m(0, 2), status: "aberto", conciliado: false, aprovado: true },
+    { id: "a11", tipo: "pagar", descricao: "Aluguel escritório", parceiro: "Imobiliária Paulista", categoria: "Estrutura", valor: 18000, vencimento: m(-1, 5), status: "pago", conciliado: true, aprovado: true },
+    { id: "a12", tipo: "pagar", descricao: "Aluguel escritório", parceiro: "Imobiliária Paulista", categoria: "Estrutura", valor: 18000, vencimento: m(0, 5), status: "pago", conciliado: false, aprovado: true },
+    { id: "a13", tipo: "pagar", descricao: "Folha de pagamento", parceiro: "Colaboradores", categoria: "Pessoal", valor: 96000, vencimento: m(-1, 5), status: "pago", conciliado: true, aprovado: true },
+    { id: "a14", tipo: "pagar", descricao: "Folha de pagamento", parceiro: "Colaboradores", categoria: "Pessoal", valor: 96000, vencimento: m(0, 5), status: "pago", conciliado: true, aprovado: true },
+  ],
+  notas: [
+    { id: "n1", numero: "000231", cliente: "Natura", valor: 45000, emissao: m(-2, 1), status: "emitida", contabilidade: true },
+    { id: "n2", numero: "000232", cliente: "Natura", valor: 45000, emissao: m(-1, 1), status: "emitida", contabilidade: true },
+    { id: "n3", numero: "000233", cliente: "Vivo", valor: 38000, emissao: m(-1, 10), status: "emitida", contabilidade: false },
+    { id: "n4", numero: "000234", cliente: "Havaianas", valor: 82000, emissao: m(-1, 12), status: "emitida", contabilidade: false },
+  ],
+  compras: [
+    { id: "p1", item: "Banco de imagens (anual)", fornecedor: "Adobe", solicitante: "Bia Santos", valor: 6200, cotacoes: 3, status: "cotação" },
+    { id: "p2", item: "Notebooks para direção de arte (2x)", fornecedor: "", solicitante: "Leo Prado", valor: 28000, cotacoes: 0, status: "solicitado" },
+    { id: "p3", item: "Captação drone campanha Verão", fornecedor: "Studio Lumen (produtora)", solicitante: "Bia Santos", valor: 9500, cotacoes: 2, status: "aprovado" },
+  ],
+  propostas: [
+    { id: "v1", cliente: "Nubank", titulo: "Lançamento cartão Ultravioleta", valor: 120000, data: m(-1, 3), status: "pedido" },
+    { id: "v2", cliente: "Havaianas", titulo: "Campanha Inverno", valor: 95000, data: m(0, 2), status: "enviada" },
+    { id: "v3", cliente: "Vivo", titulo: "Ativação festival", valor: 64000, data: m(0, 6), status: "rascunho" },
+    { id: "v4", cliente: "Natura", titulo: "Social always-on 2027", valor: 300000, data: m(-1, 20), status: "aprovada" },
+  ],
+  contratos: [
+    { id: "k1", cliente: "Natura", objeto: "Fee de conta — branding e social", valorMensal: 45000, inicio: m(-9, 1), fim: m(3, 1), reajuste: 4.5, indice: "IPCA" },
+    { id: "k2", cliente: "Vivo", objeto: "Fee de conta — performance", valorMensal: 38000, inicio: m(-14, 1), fim: m(10, 1), reajuste: 5, indice: "IGP-M" },
+    { id: "k3", cliente: "Havaianas", objeto: "Projeto campanha Verão", valorMensal: 41000, inicio: m(-4, 1), fim: m(-1, 1), reajuste: 0, indice: "—" },
+  ],
+  projetos: [
+    { id: "j1", nome: "CreativeSync Hub", cliente: "Natura", orcamento: 180000, custoTerceiros: 32000, horas: 640, valorHora: 140 },
+    { id: "j2", nome: "Campanha Verão", cliente: "Havaianas", orcamento: 164000, custoTerceiros: 63500, horas: 520, valorHora: 140 },
+    { id: "j3", nome: "Performance Q4", cliente: "Vivo", orcamento: 114000, custoTerceiros: 22000, horas: 410, valorHora: 140 },
+    { id: "j4", nome: "Cartão Ultravioleta", cliente: "Nubank", orcamento: 120000, custoTerceiros: 15000, horas: 180, valorHora: 140 },
+  ],
+  colaboradores: [
+    { id: "e1", nome: "Carol Colicigno", cargo: "Diretora", area: "Diretoria", salario: 28000, beneficios: 3200, admissao: "2019-02-01" },
+    { id: "e2", nome: "Bia Santos", cargo: "Gerente de projetos", area: "Atendimento", salario: 14000, beneficios: 2100, admissao: "2021-05-10" },
+    { id: "e3", nome: "Leo Prado", cargo: "Diretor de arte", area: "Criação", salario: 11000, beneficios: 1900, admissao: "2022-08-01" },
+    { id: "e4", nome: "Rafael Lima", cargo: "Analista financeiro", area: "Financeiro", salario: 9000, beneficios: 1700, admissao: "2023-01-16" },
+    { id: "e5", nome: "Ana Kim", cargo: "Redatora", area: "Criação", salario: 8500, beneficios: 1700, admissao: "2023-09-04" },
+    { id: "e6", nome: "Tiago Reis", cargo: "Analista de mídia", area: "Mídia", salario: 9500, beneficios: 1700, admissao: "2024-03-11" },
+  ],
+});
