@@ -11,15 +11,15 @@ module.exports = () => ({
     { id: "u4", nome: "Leo Prado", email: "leo@mantra.ag", perfil: "colaborador" },
   ],
   clientes: [
-    { id: "c1", nome: "Natura", cnpj: "71.673.990/0001-77", contato: "marketing@natura.com", segmento: "Cosméticos" },
-    { id: "c2", nome: "Vivo", cnpj: "02.558.157/0001-62", contato: "brand@vivo.com.br", segmento: "Telecom" },
-    { id: "c3", nome: "Havaianas", cnpj: "61.079.117/0001-05", contato: "mkt@havaianas.com", segmento: "Moda" },
-    { id: "c4", nome: "Nubank", cnpj: "18.236.120/0001-58", contato: "brand@nubank.com.br", segmento: "Financeiro" },
+    { id: "c1", nome: "Natura", cnpj: "71.673.990/0001-77", contato: "marketing@natura.com", contatoNome: "Juliana Reis", segmento: "Cosméticos", cidade: "São Paulo", uf: "SP" },
+    { id: "c2", nome: "Vivo", cnpj: "02.558.157/0001-62", contato: "brand@vivo.com.br", contatoNome: "Marcos Lima", segmento: "Telecom", cidade: "São Paulo", uf: "SP" },
+    { id: "c3", nome: "Havaianas", cnpj: "61.079.117/0001-05", contato: "mkt@havaianas.com", contatoNome: "Paula Souza", segmento: "Moda", cidade: "São Paulo", uf: "SP" },
+    { id: "c4", nome: "Nubank", cnpj: "18.236.120/0001-58", contato: "brand@nubank.com.br", contatoNome: "Rodrigo Alves", segmento: "Financeiro", cidade: "São Paulo", uf: "SP" },
   ],
   fornecedores: [
-    { id: "f1", nome: "Studio Lumen (produtora)", cnpj: "11.222.333/0001-44", contato: "contato@lumen.tv", categoria: "Produção" },
+    { id: "f1", nome: "Studio Lumen (produtora)", cnpj: "11.222.333/0001-81", contato: "contato@lumen.tv", categoria: "Produção" },
     { id: "f2", nome: "Meta Ads", cnpj: "13.347.016/0001-17", contato: "ads@meta.com", categoria: "Mídia" },
-    { id: "f3", nome: "Adobe", cnpj: "02.343.442/0001-41", contato: "br@adobe.com", categoria: "Software" },
+    { id: "f3", nome: "Adobe", cnpj: "02.343.442/0001-66", contato: "br@adobe.com", categoria: "Software" },
   ],
   contas: [
     { id: "a1", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-2), status: "pago", conciliado: true, aprovado: true },
@@ -92,7 +92,7 @@ module.exports = () => ({
     { id: "t14", projetoId: "j4", col: "progress", etiquetas: "UI Design", titulo: "Key visual do cartão", responsavel: "Leo Prado", comentarios: 4, anexos: 2, prazo: m(0, 13) },
   ],
   colaboradores: [
-    { id: "e1", nome: "Carol Colicigno", cargo: "Diretora", area: "Diretoria", salario: 28000, beneficios: 3200, admissao: "2019-02-01" },
+    { id: "e1", nome: "Carol Colicigno", cargo: "Diretora", area: "Diretoria", vinculo: "PJ", salario: 28000, beneficios: 3200, admissao: "2019-02-01" },
     { id: "e2", nome: "Bia Santos", cargo: "Gerente de projetos", area: "Atendimento", salario: 14000, beneficios: 2100, admissao: "2021-05-10" },
     { id: "e3", nome: "Leo Prado", cargo: "Diretor de arte", area: "Criação", salario: 11000, beneficios: 1900, admissao: "2022-08-01" },
     { id: "e4", nome: "Rafael Lima", cargo: "Analista financeiro", area: "Financeiro", salario: 9000, beneficios: 1700, admissao: "2023-01-16" },

@@ -8,12 +8,16 @@ const SCHEMA = {
     CREATE TABLE IF NOT EXISTS records (col TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (col, id));
     CREATE TABLE IF NOT EXISTS credenciais (user_id TEXT PRIMARY KEY, hash TEXT NOT NULL, salt TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sessoes (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, expira BIGINT NOT NULL);
-    CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY AUTOINCREMENT, quando TEXT NOT NULL, usuario TEXT NOT NULL, acao TEXT NOT NULL, detalhe TEXT NOT NULL);`,
+    CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY AUTOINCREMENT, quando TEXT NOT NULL, usuario TEXT NOT NULL, acao TEXT NOT NULL, detalhe TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS arquivos (id TEXT PRIMARY KEY, col TEXT NOT NULL, dono TEXT NOT NULL, categoria TEXT NOT NULL, nome TEXT NOT NULL, tipo TEXT NOT NULL, tamanho INTEGER NOT NULL, dados TEXT NOT NULL, criado_por TEXT NOT NULL, criado_em TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS arquivos_dono ON arquivos (col, dono);`,
   pg: `
     CREATE TABLE IF NOT EXISTS records (seq BIGSERIAL, col TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (col, id));
     CREATE TABLE IF NOT EXISTS credenciais (user_id TEXT PRIMARY KEY, hash TEXT NOT NULL, salt TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sessoes (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, expira BIGINT NOT NULL);
-    CREATE TABLE IF NOT EXISTS historico (id BIGSERIAL PRIMARY KEY, quando TEXT NOT NULL, usuario TEXT NOT NULL, acao TEXT NOT NULL, detalhe TEXT NOT NULL);`,
+    CREATE TABLE IF NOT EXISTS historico (id BIGSERIAL PRIMARY KEY, quando TEXT NOT NULL, usuario TEXT NOT NULL, acao TEXT NOT NULL, detalhe TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS arquivos (id TEXT PRIMARY KEY, col TEXT NOT NULL, dono TEXT NOT NULL, categoria TEXT NOT NULL, nome TEXT NOT NULL, tipo TEXT NOT NULL, tamanho INTEGER NOT NULL, dados TEXT NOT NULL, criado_por TEXT NOT NULL, criado_em TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS arquivos_dono ON arquivos (col, dono);`,
 };
 
 // Consultas comuns aos dois bancos, a partir de uma função exec(sql, params) -> linhas.
@@ -35,6 +39,14 @@ function queries(exec, dialect) {
     delUserSess: (uid) => exec("DELETE FROM sessoes WHERE user_id = ?", [uid]),
     purgeSess: (now) => exec("DELETE FROM sessoes WHERE expira < ?", [now]),
     log: async (quando, usuario, acao, detalhe) => Number((await exec("INSERT INTO historico (quando, usuario, acao, detalhe) VALUES (?, ?, ?, ?) RETURNING id", [quando, usuario, acao, detalhe]))[0].id),
+    // Arquivos (conteúdo em base64; metadados listados sem o conteúdo).
+    arqPut: (a) => exec("INSERT INTO arquivos (id, col, dono, categoria, nome, tipo, tamanho, dados, criado_por, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [a.id, a.col, a.dono, a.categoria, a.nome, a.tipo, a.tamanho, a.dados, a.criado_por, a.criado_em]),
+    arqList: async (col, dono) => (await exec("SELECT id, col, dono, categoria, nome, tipo, tamanho, criado_por, criado_em FROM arquivos WHERE col = ? AND dono = ? ORDER BY criado_em DESC", [col, dono])).map((a) => ({ ...a, tamanho: Number(a.tamanho) })),
+    arqCount: async (col) => (await exec("SELECT dono, COUNT(*) AS n FROM arquivos WHERE col = ? AND categoria = 'documento' GROUP BY dono", [col])).reduce((o, r) => ((o[r.dono] = Number(r.n)), o), {}),
+    arqGet: async (id) => (await exec("SELECT * FROM arquivos WHERE id = ?", [id]))[0] || null,
+    arqMeta: async (id) => (await exec("SELECT id, col, dono, categoria, nome, tipo, tamanho FROM arquivos WHERE id = ?", [id]))[0] || null,
+    arqDel: (id) => exec("DELETE FROM arquivos WHERE id = ?", [id]),
+    arqDelDono: (col, dono) => exec("DELETE FROM arquivos WHERE col = ? AND dono = ?", [col, dono]),
     hist: async () => (await exec("SELECT id, quando, usuario, acao, detalhe FROM historico ORDER BY id DESC LIMIT 500", [])).map((h) => ({ ...h, id: Number(h.id) })),
   };
 }

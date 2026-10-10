@@ -107,11 +107,68 @@ async function dadosPara(u) {
   await gerarRecorrentes(u);
   const out = {};
   for (const col of COLLECTIONS) out[col] = await listCol(col);
-  if (!hasModule(u, "pessoas")) out.colaboradores = out.colaboradores.map(({ id, nome, cargo, area }) => ({ id, nome, cargo, area }));
+  if (!hasModule(u, "pessoas")) out.colaboradores = out.colaboradores.map((c) => Object.fromEntries(CAMPOS_PUBLICOS_COLAB.filter((k) => k in c).map((k) => [k, c[k]])));
+  out.docs = {};
+  for (const col of Object.keys(ARQ_COLS)) if (hasModule(u, ARQ_COLS[col]) || canWrite(u, col)) out.docs[col] = await store.arqCount(col);
   out.config = [out.config.find((c) => c.id === "geral") || CONFIG_PADRAO];
   out.historico = hasModule(u, "aprovacoes") ? await store.hist() : [];
   out.integracoes = { asaas: asaas.configurado(), ambiente: asaas.ambiente() };
   return out;
+}
+
+/* ---------- Validações ---------- */
+const digitos = (v) => String(v || "").replace(/\D/g, "");
+function cpfValido(v) {
+  const d = digitos(v);
+  if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+  for (const t of [9, 10]) {
+    let soma = 0;
+    for (let i = 0; i < t; i++) soma += Number(d[i]) * (t + 1 - i);
+    if (((soma * 10) % 11) % 10 !== Number(d[t])) return false;
+  }
+  return true;
+}
+function cnpjValido(v) {
+  const d = digitos(v);
+  if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false;
+  for (const t of [12, 13]) {
+    let soma = 0, peso = t - 7;
+    for (let i = 0; i < t; i++) { soma += Number(d[i]) * peso--; if (peso < 2) peso = 9; }
+    const dv = soma % 11 < 2 ? 0 : 11 - (soma % 11);
+    if (dv !== Number(d[t])) return false;
+  }
+  return true;
+}
+// Dados pessoais de colaboradores só saem para quem tem o módulo Pessoas.
+const CAMPOS_PUBLICOS_COLAB = ["id", "nome", "cargo", "area", "fotoId", "_rev"];
+
+/* ---------- Arquivos (logos, fotos e documentos) ---------- */
+const ARQ_COLS = { clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos" };
+const ARQ_TIPOS = {
+  "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx", "application/vnd.ms-excel": "xls",
+  "text/csv": "csv", "text/plain": "txt",
+};
+const ARQ_MAX = 3 * 1024 * 1024; // 3 MB por arquivo (limite de envio da Vercel é 4,5 MB)
+const podeVerArquivo = (u, a) => canWrite(u, a.col) || hasModule(u, ARQ_COLS[a.col]) || (a.categoria === "logo") || (a.categoria === "foto");
+async function enviarArquivo(u, body) {
+  const { col, dono, categoria = "documento", nome, tipo, dados } = body || {};
+  if (!ARQ_COLS[col]) throw new HttpError(400, "Tipo de cadastro inválido");
+  if (!canWrite(u, col)) throw new HttpError(403, "Seu perfil não pode anexar arquivos aqui");
+  if (!["documento", "logo", "foto"].includes(categoria)) throw new HttpError(400, "Categoria inválida");
+  if (!ARQ_TIPOS[tipo]) throw new HttpError(400, "Formato não aceito. Use PDF, imagem (PNG/JPG/WEBP), Word, Excel, CSV ou TXT.");
+  if ((categoria !== "documento") && !tipo.startsWith("image/")) throw new HttpError(400, "Logo e foto precisam ser imagens");
+  if (typeof dados !== "string" || !/^[A-Za-z0-9+/=]+$/.test(dados)) throw new HttpError(400, "Arquivo inválido");
+  const tamanho = Math.floor((dados.length * 3) / 4) - (dados.endsWith("==") ? 2 : dados.endsWith("=") ? 1 : 0);
+  if (tamanho > ARQ_MAX) throw new HttpError(413, "Arquivo maior que 3 MB");
+  const rec = await getRec(col, String(dono || ""));
+  if (!rec) throw new HttpError(404, "Salve o cadastro antes de anexar arquivos");
+  const a = { id: crypto.randomBytes(12).toString("hex"), col, dono: rec.id, categoria, nome: String(nome || "arquivo").replace(/[\\/\r\n"]/g, "_").slice(0, 150), tipo, tamanho, dados, criado_por: u.nome, criado_em: new Date().toISOString() };
+  await store.arqPut(a);
+  if (categoria === "documento") await log(u.nome, "Documento anexado", `${col}: ${labelOf(rec)} — ${a.nome}`);
+  const { dados: _, ...meta } = a;
+  return meta;
 }
 
 /* ---------- Cobranças recorrentes de contratos ---------- */
@@ -162,7 +219,8 @@ async function integracao(u, acao, body) {
       const cliente = (await listCol("clientes")).find((c) => c.nome === conta.parceiro);
       if (!cliente) throw new HttpError(400, `Cliente "${conta.parceiro}" não está cadastrado`);
       conta.asaas = await asaas.criarCobranca(conta, cliente);
-      if (!cliente.asaasId) await store.put("clientes", cliente.id, { ...cliente, asaasId: conta.asaas.customer });
+      conta._rev = (Number(conta._rev) || 0) + 1;
+      if (!cliente.asaasId) await store.put("clientes", cliente.id, { ...cliente, asaasId: conta.asaas.customer, _rev: (Number(cliente._rev) || 0) + 1 });
       await store.put("contas", conta.id, conta);
       const h = await log(u.nome, "Cobrança Asaas", `${conta.parceiro}: ${conta.descricao}`);
       return { registros: [{ col: "contas", rec: conta }], historico: h };
@@ -179,6 +237,7 @@ async function integracao(u, acao, body) {
       const r = await asaas.emitirNfse(nota, cliente, cfg);
       Object.assign(nota, { asaas: r, status: asaas.NOTA[r.status] || "processando", numero: r.numero || "" });
       conta.nota = nota.numero || "em emissão";
+      conta._rev = (Number(conta._rev) || 0) + 1;
       await store.tx(async (s) => { await s.put("notas", nota.id, nota); await s.put("contas", conta.id, conta); });
       const h = await log(u.nome, "NFS-e solicitada", `${cliente.nome} — ${conta.descricao}`);
       return { registros: [{ col: "notas", rec: nota }, { col: "contas", rec: conta }], historico: h };
@@ -200,6 +259,7 @@ async function integracao(u, acao, body) {
 async function atualizarConta(conta, p) {
   conta.asaas = { ...conta.asaas, ...p };
   if (asaas.PAGO.includes(p.status)) conta.status = "pago";
+  conta._rev = (Number(conta._rev) || 0) + 1;
   await store.put("contas", conta.id, conta);
   return [{ col: "contas", rec: conta }];
 }
@@ -207,10 +267,11 @@ async function atualizarNota(nota, n) {
   nota.asaas = { ...nota.asaas, ...n };
   nota.status = asaas.NOTA[n.status] || nota.status;
   if (n.numero) nota.numero = n.numero;
+  nota._rev = (Number(nota._rev) || 0) + 1;
   await store.put("notas", nota.id, nota);
   const out = [{ col: "notas", rec: nota }];
   const conta = nota.conta && (await getRec("contas", nota.conta));
-  if (conta && n.numero && conta.nota !== n.numero) { conta.nota = n.numero; await store.put("contas", conta.id, conta); out.push({ col: "contas", rec: conta }); }
+  if (conta && n.numero && conta.nota !== n.numero) { conta.nota = n.numero; conta._rev = (Number(conta._rev) || 0) + 1; await store.put("contas", conta.id, conta); out.push({ col: "contas", rec: conta }); }
   return out;
 }
 // Webhook do Asaas: confirma pagamentos e emissão de notas automaticamente.
@@ -242,7 +303,8 @@ const labelOf = (r) => r?.descricao || r?.nome || r?.titulo || r?.item || r?.obj
 
 async function aplicarLote(u, { changes = [], acao, detalhe }) {
   if (!Array.isArray(changes) || changes.length > 200) throw new HttpError(400, "Lote inválido");
-  return store.tx(async (s) => {
+  const revs = [];
+  const entrada = await store.tx(async (s) => {
     for (const ch of changes) {
       const { op, col, id } = ch;
       if (!COLLECTIONS.includes(col) || typeof id !== "string" || !id || id.length > 64) throw new HttpError(400, "Registro inválido");
@@ -258,11 +320,24 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
         }
         if (col === "config") throw new HttpError(400, "Configuração não pode ser excluída");
         await s.del(col, id);
+        if (ARQ_COLS[col]) await s.arqDelDono(col, id);
         continue;
       }
       if (op !== "put" || !ch.data || typeof ch.data !== "object") throw new HttpError(400, "Operação inválida");
-      const data = { ...ch.data, id };
+      // Controle de concorrência: o registro precisa estar na mesma versão que o usuário editou.
+      const revAntes = Number(antes?._rev) || 0;
+      if (antes && (Number(ch.data._rev) || 0) !== revAntes) throw new HttpError(409, `"${labelOf(antes)}" foi alterado por outra pessoa. Os dados foram recarregados; refaça sua alteração.`);
+      const data = { ...ch.data, id, _rev: revAntes + 1 };
+      revs.push({ col, id, rev: data._rev });
       if (JSON.stringify(data).length > 20000) throw new HttpError(413, "Registro grande demais");
+      if (col === "clientes" || col === "fornecedores") {
+        if (data.cnpj && digitos(data.cnpj).length === 14 && !cnpjValido(data.cnpj)) throw new HttpError(400, `CNPJ inválido: ${data.cnpj}`);
+        if (data.cnpj && digitos(data.cnpj).length === 11 && !cpfValido(data.cnpj)) throw new HttpError(400, `CPF inválido: ${data.cnpj}`);
+      }
+      if (col === "colaboradores") {
+        if (!hasModule(u, "pessoas")) throw new HttpError(403, "Sem acesso a dados de pessoas");
+        if (data.cpf && !cpfValido(data.cpf)) throw new HttpError(400, `CPF inválido: ${data.cpf}`);
+      }
 
       // Aprovação só por perfis aprovadores.
       if (col === "contas") {
@@ -305,6 +380,7 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
         : null;
     return entrada;
   });
+  return { entrada, revs };
 }
 
 /* ---------- HTTP ---------- */
@@ -326,7 +402,7 @@ function readBody(req) {
   }
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
-    req.on("data", (c) => { size += c.length; if (size > 1e6) { reject(new HttpError(413, "Corpo grande demais")); req.destroy(); } else chunks.push(c); });
+    req.on("data", (c) => { size += c.length; if (size > 4.5e6) { reject(new HttpError(413, "Corpo grande demais")); req.destroy(); } else chunks.push(c); });
     req.on("end", () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks)) : {}); } catch { reject(new HttpError(400, "JSON inválido")); } });
     req.on("error", reject);
   });
@@ -374,8 +450,8 @@ async function api(req, res, url) {
   if (route === "GET /api/me") return send(res, 200, { usuario: u });
   if (route === "GET /api/data") return send(res, 200, await dadosPara(u));
   if (route === "POST /api/sync") {
-    const entrada = await aplicarLote(u, await readBody(req));
-    return send(res, 200, { ok: true, historico: entrada });
+    const { entrada, revs } = await aplicarLote(u, await readBody(req));
+    return send(res, 200, { ok: true, historico: entrada, revs });
   }
   if (route === "POST /api/senha") {
     const { atual, nova } = await readBody(req);
@@ -383,6 +459,31 @@ async function api(req, res, url) {
     if (String(nova || "").length < 8) throw new HttpError(400, "A nova senha precisa ter ao menos 8 caracteres");
     const h = hashSenha(nova); await store.putCred(u.id, h.hash, h.salt);
     await log(u.nome, "Senha alterada", u.email);
+    return send(res, 200, { ok: true });
+  }
+  if (route === "POST /api/arquivos") return send(res, 200, await enviarArquivo(u, await readBody(req)));
+  if (route === "GET /api/arquivos") {
+    const col = url.searchParams.get("col"), dono = url.searchParams.get("dono") || "";
+    if (!ARQ_COLS[col] || !(hasModule(u, ARQ_COLS[col]) || canWrite(u, col))) throw new HttpError(403, "Sem acesso");
+    return send(res, 200, (await store.arqList(col, dono)).filter((a) => a.categoria === "documento"));
+  }
+  let m;
+  if (req.method === "GET" && (m = url.pathname.match(/^\/api\/arquivos\/([a-f0-9]{24})$/))) {
+    const a = await store.arqGet(m[1]);
+    if (!a || !podeVerArquivo(u, a)) throw new HttpError(404, "Arquivo não encontrado");
+    const imagem = a.tipo.startsWith("image/");
+    res.writeHead(200, {
+      "Content-Type": a.tipo, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      "Content-Disposition": `${imagem || a.tipo === "application/pdf" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(a.nome)}`,
+    });
+    return res.end(Buffer.from(a.dados, "base64"));
+  }
+  if (req.method === "POST" && (m = url.pathname.match(/^\/api\/arquivos\/([a-f0-9]{24})\/excluir$/))) {
+    const a = await store.arqMeta(m[1]);
+    if (!a || !canWrite(u, a.col)) throw new HttpError(404, "Arquivo não encontrado");
+    await store.arqDel(a.id);
+    if (a.categoria === "documento") await log(u.nome, "Documento removido", `${a.col}: ${a.nome}`);
     return send(res, 200, { ok: true });
   }
   if (route === "POST /api/integracoes/cobranca" || route === "POST /api/integracoes/nfse" || route === "POST /api/integracoes/sincronizar")

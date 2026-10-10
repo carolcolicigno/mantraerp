@@ -27,8 +27,8 @@ async function clienteId(cliente) {
   if (doc.length !== 11 && doc.length !== 14) throw new AsaasError(`Cadastre um CPF/CNPJ válido para o cliente ${cliente.nome}`);
   const achado = await call("GET", `/customers?cpfCnpj=${doc}`);
   if (achado.data?.[0]) return achado.data[0].id;
-  const email = /@/.test(cliente.contato || "") ? cliente.contato : undefined;
-  return (await call("POST", "/customers", { name: cliente.nome, cpfCnpj: doc, email, externalReference: cliente.id })).id;
+  const email = [cliente.emailFinanceiro, cliente.contato].find((e) => /@/.test(e || "")) || undefined;
+  return (await call("POST", "/customers", { name: cliente.razaoSocial || cliente.nome, cpfCnpj: doc, email, mobilePhone: digitos(cliente.telefone) || undefined, postalCode: digitos(cliente.cep) || undefined, addressNumber: cliente.numero || undefined, externalReference: cliente.id })).id;
 }
 
 const resumoCobranca = (p) => ({ id: p.id, status: p.status, url: p.invoiceUrl || "", boleto: p.bankSlipUrl || "" });

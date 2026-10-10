@@ -62,6 +62,15 @@ Faça backup do arquivo do banco (`/data/mantra.db`) regularmente.
   "Emitir NFS-e" emite a nota pela prefeitura. Cadastre o webhook para baixar pagamentos e
   atualizar notas automaticamente. Configure o serviço municipal e o ISS em Configurações.
 
+## Cadastros e anexos
+
+- Clientes (logo, razão social, CNPJ com consulta à Receita via BrasilAPI, endereço com consulta de
+  CEP via ViaCEP, contatos e e-mail do financeiro), fornecedores e colaboradores (foto, CPF, RG,
+  contatos, endereço, contato de emergência e dados bancários).
+- Documentos anexados a clientes, fornecedores, contratos, colaboradores e projetos: PDF, imagens,
+  Word, Excel, CSV ou TXT, até 3 MB cada, guardados no próprio banco (tabela `arquivos`).
+  O plano gratuito do Neon tem 0,5 GB: para muitos arquivos, considere um plano maior.
+
 ## Segurança
 
 - Senhas guardadas com scrypt + salt; sessões em cookie `HttpOnly` / `SameSite=Strict`.
@@ -69,3 +78,9 @@ Faça backup do arquivo do banco (`/data/mantra.db`) regularmente.
   despesas e compras; salários só são enviados a quem tem acesso ao módulo Pessoas.
 - Limite de 10 tentativas de login a cada 15 minutos por IP.
 - Toda alteração fica registrada no histórico com o usuário autenticado.
+- Controle de versão por registro: se duas pessoas editam o mesmo cadastro, a segunda é avisada
+  em vez de sobrescrever a primeira.
+- CPF e CNPJ validados no servidor; dados pessoais, salários e documentos de colaboradores só são
+  enviados a quem tem acesso ao módulo Pessoas.
+- Arquivos: só formatos permitidos, servidos com `nosniff`, CSP restritiva e checagem de permissão;
+  são apagados junto com o cadastro.

@@ -54,7 +54,16 @@ function save() {
   if (!changes.length && !lg) return;
   syncChain = syncChain
     .then(() => apiFetch("/api/sync", { changes, ...(lg || {}) }))
-    .then((r) => { if (r.historico && hasHist()) { db.historico.unshift(r.historico); if (state2.tab.aprovacoes === "Histórico de alterações" && state2.mod === "aprovacoes") renderView(); } })
+    .then((r) => {
+      // Atualiza a versão (_rev) dos registros gravados, sem marcar como alterados.
+      for (const { col, id, rev } of r.revs || []) {
+        const rec = (db[col] || []).find((x) => x.id === id);
+        if (!rec) continue;
+        const emDia = synced[col].get(id) === JSON.stringify(rec);
+        rec._rev = rev;
+        if (emDia) synced[col].set(id, JSON.stringify(rec));
+      }
+      if (r.historico && hasHist()) { db.historico.unshift(r.historico); if (state2.tab.aprovacoes === "Histórico de alterações" && state2.mod === "aprovacoes") renderView(); } })
     .catch(async (e) => { toast(e.message); await loadData().catch(() => {}); renderView(); });
 }
 const asaasOn = () => !!db.integracoes?.asaas;
@@ -118,12 +127,53 @@ const SCHEMAS = {
     { k: "valor", label: "Valor estimado", type: "money" },
     { k: "status", label: "Status", type: "select", options: ["solicitado", "cotação", "aprovado", "recusado"] },
   ] },
-  fornecedores: { singular: "Fornecedor", fields: [
-    { k: "nome", label: "Nome" }, { k: "cnpj", label: "CNPJ" }, { k: "contato", label: "Contato" },
+  fornecedores: { singular: "Fornecedor", wide: true, fields: [
+    { section: "Identificação" },
+    { k: "nome", label: "Nome" },
     { k: "categoria", label: "Categoria", type: "select", options: ["Produção", "Mídia", "Software", "Serviços", "Estrutura", "Outros"] },
+    { k: "cnpj", label: "CNPJ ou CPF", type: "cnpj", optional: true },
+    { k: "razaoSocial", label: "Razão social", optional: true },
+    { section: "Contato e pagamento" },
+    { k: "contato", label: "E-mail", type: "email", optional: true },
+    { k: "telefone", label: "Telefone", type: "tel", optional: true },
+    { k: "pix", label: "Chave Pix", optional: true },
+    { k: "dadosBancarios", label: "Banco / agência / conta", optional: true },
+    { section: "Endereço" },
+    { k: "cep", label: "CEP", type: "cep", optional: true },
+    { k: "logradouro", label: "Logradouro", optional: true },
+    { k: "numero", label: "Número", optional: true },
+    { k: "complemento", label: "Complemento", optional: true },
+    { k: "bairro", label: "Bairro", optional: true },
+    { k: "cidade", label: "Cidade", optional: true },
+    { k: "uf", label: "UF", optional: true, maxlength: 2 },
+    { section: "Observações" },
+    { k: "observacoes", label: "Observações", type: "textarea", optional: true, full: true },
   ] },
-  clientes: { singular: "Cliente", fields: [
-    { k: "nome", label: "Nome" }, { k: "cnpj", label: "CNPJ" }, { k: "contato", label: "Contato" }, { k: "segmento", label: "Segmento" },
+  clientes: { singular: "Cliente", wide: true, fields: [
+    { section: "Identificação" },
+    { k: "logoId", label: "Logo", type: "image", categoria: "logo", full: true },
+    { k: "cnpj", label: "CNPJ", type: "cnpj", lookup: true },
+    { k: "nome", label: "Nome fantasia" },
+    { k: "razaoSocial", label: "Razão social", optional: true },
+    { k: "segmento", label: "Segmento", optional: true },
+    { k: "inscricaoEstadual", label: "Inscrição estadual", optional: true },
+    { k: "inscricaoMunicipal", label: "Inscrição municipal", optional: true },
+    { k: "site", label: "Site", optional: true },
+    { section: "Contatos" },
+    { k: "contatoNome", label: "Contato principal", optional: true },
+    { k: "contato", label: "E-mail principal", type: "email", optional: true },
+    { k: "telefone", label: "Telefone", type: "tel", optional: true },
+    { k: "emailFinanceiro", label: "E-mail do financeiro (cobranças e NF)", type: "email", optional: true },
+    { section: "Endereço" },
+    { k: "cep", label: "CEP", type: "cep", optional: true },
+    { k: "logradouro", label: "Logradouro", optional: true },
+    { k: "numero", label: "Número", optional: true },
+    { k: "complemento", label: "Complemento", optional: true },
+    { k: "bairro", label: "Bairro", optional: true },
+    { k: "cidade", label: "Cidade", optional: true },
+    { k: "uf", label: "UF", optional: true, maxlength: 2 },
+    { section: "Observações" },
+    { k: "observacoes", label: "Observações", type: "textarea", optional: true, full: true },
   ] },
   propostas: { singular: "Proposta", fields: [
     { k: "cliente", label: "Cliente", type: "select", options: opts("clientes") },
@@ -152,11 +202,36 @@ const SCHEMAS = {
     { k: "horas", label: "Horas trabalhadas", type: "number" },
     { k: "valorHora", label: "Custo/hora interno", type: "money" },
   ] },
-  colaboradores: { singular: "Colaborador", fields: [
-    { k: "nome", label: "Nome" }, { k: "cargo", label: "Cargo" },
+  colaboradores: { singular: "Colaborador", wide: true, fields: [
+    { section: "Profissional" },
+    { k: "fotoId", label: "Foto", type: "image", categoria: "foto", full: true },
+    { k: "nome", label: "Nome completo" }, { k: "cargo", label: "Cargo" },
     { k: "area", label: "Área", type: "select", options: ["Diretoria", "Atendimento", "Criação", "Mídia", "Financeiro", "Tecnologia"] },
-    { k: "salario", label: "Salário", type: "money" }, { k: "beneficios", label: "Benefícios", type: "money" },
+    { k: "vinculo", label: "Vínculo", type: "select", options: ["CLT", "PJ", "Estágio", "Freelancer"] },
     { k: "admissao", label: "Admissão", type: "date" },
+    { k: "salario", label: "Salário / remuneração", type: "money" }, { k: "beneficios", label: "Benefícios", type: "money" },
+    { section: "Dados pessoais" },
+    { k: "cpf", label: "CPF", type: "cpf", optional: true },
+    { k: "rg", label: "RG", optional: true },
+    { k: "nascimento", label: "Data de nascimento", type: "date", optional: true },
+    { k: "email", label: "E-mail pessoal", type: "email", optional: true },
+    { k: "telefone", label: "Celular", type: "tel", optional: true },
+    { section: "Endereço" },
+    { k: "cep", label: "CEP", type: "cep", optional: true },
+    { k: "logradouro", label: "Logradouro", optional: true },
+    { k: "numero", label: "Número", optional: true },
+    { k: "complemento", label: "Complemento", optional: true },
+    { k: "bairro", label: "Bairro", optional: true },
+    { k: "cidade", label: "Cidade", optional: true },
+    { k: "uf", label: "UF", optional: true, maxlength: 2 },
+    { section: "Contato de emergência" },
+    { k: "emergenciaNome", label: "Nome", optional: true },
+    { k: "emergenciaTelefone", label: "Telefone", type: "tel", optional: true },
+    { section: "Dados bancários" },
+    { k: "banco", label: "Banco", optional: true },
+    { k: "agencia", label: "Agência", optional: true },
+    { k: "contaBancaria", label: "Conta", optional: true },
+    { k: "pix", label: "Chave Pix", optional: true },
   ] },
   atividades: { singular: "Follow-up", fields: [
     { k: "cliente", label: "Cliente", type: "select", options: opts("clientes") },
@@ -186,13 +261,22 @@ const SCHEMAS = {
 /* ---------- Formulário (modal) ---------- */
 const dialog = document.getElementById("formDialog");
 let formCtx = null;
+const MASK = {
+  cpf: (d) => d.slice(0, 11).replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2"),
+  cnpj: (d) => d.length <= 11 ? MASK.cpf(d) : d.slice(0, 14).replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2"),
+  cep: (d) => d.slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2"),
+  tel: (d) => d.slice(0, 11).replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d)(\d{4})$/, "$1-$2"),
+};
+const fileUrl = (id) => `/api/arquivos/${encodeURIComponent(id)}`;
 function openForm(col, record, defaults = {}) {
   const sc = SCHEMAS[col];
   const rec = record || { ...defaults };
-  formCtx = { col, id: record?.id, defaults };
+  formCtx = { col, id: record?.id, defaults, images: {} };
+  dialog.classList.toggle("dialog--wide", !!sc.wide);
   document.getElementById("formDelete").hidden = !record;
   document.getElementById("formTitle").textContent = (record ? "Editar " : "Novo ") + sc.singular.toLowerCase();
   document.getElementById("formFields").innerHTML = sc.fields.map((f) => {
+    if (f.section) return `<h3 class="form-section">${f.section}</h3>`;
     const v = rec[f.k] ?? "";
     let input;
     if (f.type === "select") {
@@ -200,15 +284,95 @@ function openForm(col, record, defaults = {}) {
       input = `<select name="${f.k}">${o.map((x) => `<option value="${escH(x)}" ${x === v ? "selected" : ""}>${escH(f.labels?.[x] ?? x)}</option>`).join("")}</select>`;
     } else if (f.type === "bool") {
       input = `<input type="checkbox" name="${f.k}" ${v ? "checked" : ""} />`;
+    } else if (f.type === "image") {
+      return `<div class="img-field full"><img id="img-${f.k}" src="${v ? fileUrl(v) : "logo.svg"}" class="${v ? "" : "is-empty"}" alt="" />
+        <label class="btn-ghost">Escolher imagem<input type="file" accept="image/png,image/jpeg,image/webp" data-image="${f.k}" hidden /></label>
+        ${v ? `<button type="button" class="btn-ghost no" data-image-clear="${f.k}">Remover</button>` : ""}<span class="crumbs">${f.label} · PNG, JPG ou WEBP</span></div>`;
+    } else if (f.type === "textarea") {
+      input = `<textarea name="${f.k}" rows="3" ${f.optional ? "" : "required"}>${escH(v)}</textarea>`;
     } else {
-      const t = f.type === "date" ? "date" : f.type === "money" || f.type === "number" ? "number" : f.type === "password" ? "password" : "text";
+      const t = f.type === "date" ? "date" : f.type === "money" || f.type === "number" ? "number" : f.type === "password" ? "password" : f.type === "email" ? "email" : f.type === "tel" ? "tel" : "text";
       const req = f.type === "password" ? (record ? "" : "required") : f.optional ? "" : "required";
-      input = `<input type="${t}" name="${f.k}" value="${t === "password" ? "" : escH(v)}" ${t === "number" ? 'step="any"' : ""} ${t === "password" ? 'minlength="8" autocomplete="new-password"' : ""} ${req} />`;
+      const extra = MASK[f.type] ? `data-mask="${f.type}" inputmode="numeric"` : "";
+      input = `<input type="${t}" name="${f.k}" value="${t === "password" ? "" : escH(v)}" ${t === "number" ? 'step="any"' : ""} ${t === "password" ? 'minlength="8" autocomplete="new-password"' : ""} ${f.maxlength ? `maxlength="${f.maxlength}"` : ""} ${extra} ${req} />`;
+      if (f.lookup) input = `<span class="input-btn">${input}<button type="button" class="btn-ghost" data-cnpj-lookup>Buscar dados</button></span>`;
+      if (f.type === "cep") input = `<span class="input-btn">${input}<button type="button" class="btn-ghost" data-cep-lookup>Buscar CEP</button></span>`;
     }
     return `<label class="${f.full ? "full" : ""}">${f.label}${input}</label>`;
   }).join("");
   dialog.showModal();
 }
+const fieldEl = (k) => document.querySelector(`#recordForm [name="${k}"]`);
+const preencher = (map) => { for (const [k, v] of Object.entries(map)) { const el = fieldEl(k); if (el && v && !el.value) el.value = v; } };
+document.getElementById("formFields").addEventListener("input", (e) => {
+  const m = e.target.dataset.mask;
+  if (m) e.target.value = MASK[m](e.target.value.replace(/\D/g, ""));
+});
+document.getElementById("formFields").addEventListener("change", (e) => {
+  const k = e.target.dataset.image;
+  if (!k || !e.target.files[0]) return;
+  formCtx.images[k] = e.target.files[0];
+  const img = document.getElementById(`img-${k}`);
+  img.src = URL.createObjectURL(e.target.files[0]); img.classList.remove("is-empty");
+});
+document.getElementById("formFields").addEventListener("click", async (e) => {
+  const clear = e.target.closest("[data-image-clear]");
+  if (clear) { formCtx.images[clear.dataset.imageClear] = null; const img = document.getElementById(`img-${clear.dataset.imageClear}`); img.src = "logo.svg"; img.classList.add("is-empty"); clear.remove(); return; }
+  if (e.target.closest("[data-cep-lookup]")) {
+    const cep = (fieldEl("cep")?.value || "").replace(/\D/g, "");
+    if (cep.length !== 8) return toast("Digite um CEP com 8 dígitos");
+    try {
+      const r = await (await fetch(`https://viacep.com.br/ws/${cep}/json/`)).json();
+      if (r.erro) return toast("CEP não encontrado");
+      ["logradouro", "bairro", "cidade", "uf"].forEach((k) => { const el = fieldEl(k); if (el) el.value = ""; });
+      preencher({ logradouro: r.logradouro, bairro: r.bairro, cidade: r.localidade, uf: r.uf });
+      fieldEl("numero")?.focus();
+    } catch { toast("Não foi possível consultar o CEP agora"); }
+  }
+  if (e.target.closest("[data-cnpj-lookup]")) {
+    const cnpj = (fieldEl("cnpj")?.value || "").replace(/\D/g, "");
+    if (cnpj.length !== 14) return toast("Digite um CNPJ com 14 dígitos");
+    try {
+      const resp = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+      if (!resp.ok) return toast("CNPJ não encontrado na Receita");
+      const r = await resp.json();
+      preencher({
+        razaoSocial: r.razao_social, nome: r.nome_fantasia || r.razao_social, cep: r.cep ? MASK.cep(String(r.cep)) : "",
+        logradouro: [r.descricao_tipo_de_logradouro, r.logradouro].filter(Boolean).join(" "), numero: r.numero, complemento: r.complemento,
+        bairro: r.bairro, cidade: r.municipio, uf: r.uf, telefone: r.ddd_telefone_1 ? MASK.tel(String(r.ddd_telefone_1)) : "", contato: r.email,
+      });
+      toast("Dados preenchidos pela Receita Federal — confira antes de salvar");
+    } catch { toast("Não foi possível consultar o CNPJ agora"); }
+  }
+});
+// Reduz a imagem para no máximo 400 px e envia como WEBP.
+async function reduzirImagem(file) {
+  const bmp = await createImageBitmap(file);
+  const escala = Math.min(1, 400 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * escala); c.height = Math.round(bmp.height * escala);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const blob = await new Promise((r) => c.toBlob(r, "image/webp", 0.88));
+  return blob || file;
+}
+const paraBase64 = (blob) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1]); fr.onerror = rej; fr.readAsDataURL(blob); });
+async function enviarArquivo(col, dono, file, categoria = "documento") {
+  if (file.size > 3 * 1024 * 1024) throw new Error(`"${file.name}" é maior que 3 MB`);
+  return apiFetch("/api/arquivos", { col, dono, categoria, nome: file.name, tipo: file.type || "application/octet-stream", dados: await paraBase64(file) });
+}
+async function salvarImagens(col, rec, images) {
+  if (!db[col].includes(rec)) return; // o salvamento falhou e os dados foram recarregados
+  for (const [k, file] of Object.entries(images)) {
+    const antigo = rec[k];
+    try {
+      if (file) { const blob = await reduzirImagem(file); rec[k] = (await enviarArquivo(col, rec.id, new File([blob], file.name.replace(/\.\w+$/, "") + ".webp", { type: blob.type || "image/webp" }), SCHEMAS[col].fields.find((f) => f.k === k).categoria)).id; }
+      else rec[k] = "";
+      if (antigo) apiFetch(`/api/arquivos/${antigo}/excluir`, {}).catch(() => {});
+    } catch (e) { toast(e.message); }
+  }
+  render();
+}
+
 document.getElementById("formCancel").addEventListener("click", () => dialog.close());
 document.getElementById("formDelete").addEventListener("click", () => {
   const { col, id } = formCtx;
@@ -223,21 +387,27 @@ document.getElementById("recordForm").addEventListener("submit", (e) => {
   const fd = new FormData(e.target);
   const data = {};
   for (const f of SCHEMAS[col].fields) {
+    if (f.section || f.type === "image") continue;
     if (f.type === "bool") data[f.k] = fd.has(f.k);
     else if (f.type === "money" || f.type === "number") data[f.k] = Number(fd.get(f.k)) || 0;
     else if (f.type === "password") { const v = String(fd.get(f.k) || ""); if (v) data[f.k] = v; }
     else data[f.k] = String(fd.get(f.k) ?? "").trim();
   }
+  let rec;
   if (id) {
-    Object.assign(db[col].find((x) => x.id === id), data);
+    rec = db[col].find((x) => x.id === id);
+    Object.assign(rec, data);
     log("Edição", `${SCHEMAS[col].singular}: ${labelOf(data)}`);
   } else {
-    const rec = { id: uid(), ...formCtx.defaults, ...data };
+    rec = { id: uid(), ...formCtx.defaults, ...data };
     if (col === "contas") Object.assign(rec, { conciliado: false, aprovado: rec.tipo === "receber" || rec.valor < 5000 });
     db[col].push(rec);
     log("Criação", `${SCHEMAS[col].singular}: ${labelOf(data)}`);
   }
   save(); render();
+  // Imagens são enviadas depois que o cadastro existe no servidor.
+  const images = formCtx.images;
+  if (Object.keys(images).length) syncChain.then(() => salvarImagens(col, rec, images));
 });
 const labelOf = (r) => r.descricao || r.nome || r.titulo || r.item || r.objeto || r.numero || "";
 
@@ -374,6 +544,51 @@ function exportarCSV(nome, header, rows) {
   log("Exportação", nome);
 }
 
+/* ----- Documentos anexados ----- */
+const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
+const docsCount = (col, id) => db.docs?.[col]?.[id] || 0;
+const docsAction = (col) => (r) => ({ label: `Documentos (${docsCount(col, r.id)})`, fn: () => abrirDocumentos(col, r) });
+async function abrirDocumentos(col, rec) {
+  let dlg = document.getElementById("docDialog");
+  if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "docDialog"; dlg.className = "dialog dialog--wide"; document.body.appendChild(dlg); }
+  const podeEditar = can(MODULO_DOC[col]);
+  const draw = async () => {
+    let lista = [];
+    try { lista = await apiFetch(`/api/arquivos?col=${col}&dono=${encodeURIComponent(rec.id)}`); } catch (e) { toast(e.message); }
+    db.docs ||= {}; (db.docs[col] ||= {})[rec.id] = lista.length;
+    dlg.innerHTML = `<h2>Documentos — ${escH(labelOf(rec))}</h2>
+      ${lista.length ? `<table class="table"><thead><tr><th>Arquivo</th><th class="num">Tamanho</th><th>Enviado por</th><th>Data</th><th></th></tr></thead><tbody>
+        ${lista.map((a) => `<tr><td><a href="${fileUrl(a.id)}" target="_blank" rel="noopener">${escH(a.nome)}</a></td><td class="num">${fmtBytes(a.tamanho)}</td>
+          <td>${escH(a.criado_por)}</td><td>${new Date(a.criado_em).toLocaleDateString("pt-BR")}</td>
+          <td><div class="row-actions"><a class="btn-mini" href="${fileUrl(a.id)}" download="${escH(a.nome)}">Baixar</a>${podeEditar ? `<button class="no" data-del="${a.id}">Excluir</button>` : ""}</div></td></tr>`).join("")}
+      </tbody></table>` : `<p class="empty">Nenhum documento anexado.</p>`}
+      ${podeEditar ? `<label class="dropzone" id="docDrop"><input type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt" />
+        <b>Clique para anexar</b> ou arraste arquivos aqui<br /><span class="crumbs">PDF, imagens, Word, Excel, CSV ou TXT · até 3 MB cada</span></label>` : ""}
+      <div class="dialog__actions"><button class="btn-ghost" data-close>Fechar</button></div>`;
+  };
+  const enviar = async (files) => {
+    for (const f of files) {
+      try { toast(`Enviando ${f.name}…`); await enviarArquivo(col, rec.id, f); } catch (e) { toast(e.message); }
+    }
+    await draw(); renderView();
+  };
+  dlg.onclick = async (e) => {
+    if (e.target.closest("[data-close]")) return dlg.close();
+    const del = e.target.closest("[data-del]");
+    if (del && confirm("Excluir este documento?")) {
+      try { await apiFetch(`/api/arquivos/${del.dataset.del}/excluir`, {}); } catch (err) { toast(err.message); }
+      await draw(); renderView();
+    }
+  };
+  dlg.onchange = (e) => { if (e.target.type === "file" && e.target.files.length) enviar([...e.target.files]); };
+  dlg.ondragover = (e) => { e.preventDefault(); document.getElementById("docDrop")?.classList.add("is-over"); };
+  dlg.ondragleave = () => document.getElementById("docDrop")?.classList.remove("is-over");
+  dlg.ondrop = (e) => { e.preventDefault(); if (podeEditar && e.dataTransfer.files.length) enviar([...e.dataTransfer.files]); };
+  await draw(); dlg.showModal();
+}
+const MODULO_DOC = { clientes: "vendas", fornecedores: "compras", contratos: "contratos", colaboradores: "pessoas", projetos: "servicos" };
+const thumb = (id, nome, redondo) => `<span class="thumb-cell">${id ? `<img class="thumb ${redondo ? "thumb--round" : ""}" src="${fileUrl(id)}" alt="" loading="lazy" />` : `<span class="thumb thumb--empty ${redondo ? "thumb--round" : ""}">${escH(String(nome || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase())}</span>`}${escH(nome)}</span>`;
+
 /* ----- Cotações lado a lado ----- */
 function abrirCotacoes(p) {
   p.cotacoesLista ||= [];
@@ -465,18 +680,18 @@ const MODULES = {
         { label: `Cotações (${(r.cotacoesLista || []).length})`, cls: "main", fn: () => abrirCotacoes(r) },
         ...editDel("compras")(r)] }),
     Fornecedores: () => table({ title: "Fornecedores", rows: db.fornecedores, addCol: "fornecedores",
-      cols: [{ label: "Nome", get: txt("nome") }, { label: "CNPJ", get: txt("cnpj") }, { label: "Contato", get: txt("contato") }, { label: "Categoria", get: (r) => pill(r.categoria) },
+      cols: [{ label: "Nome", get: txt("nome") }, { label: "CNPJ", get: txt("cnpj") }, { label: "Contato", get: (r) => escH([r.contato, r.telefone].filter(Boolean).join(" · ") || "—") }, { label: "Categoria", get: (r) => pill(r.categoria) },
         { label: "Total a pagar", num: true, get: (r) => BRL(sum(pagar().filter((c) => c.parceiro === r.nome && c.status !== "pago"), (c) => c.valor)) }],
-      actions: editDel("fornecedores") }),
+      actions: (r) => [docsAction("fornecedores")(r), ...editDel("fornecedores")(r)] }),
   } },
   vendas: { label: "Vendas e clientes", tabs: {
     "Propostas e pedidos": renderPropostas,
     "Follow-ups": renderFollowups,
     Clientes: () => table({ title: "Clientes", rows: db.clientes, addCol: "clientes",
-      cols: [{ label: "Nome", get: txt("nome") }, { label: "CNPJ", get: txt("cnpj") }, { label: "Contato", get: txt("contato") }, { label: "Segmento", get: (r) => pill(r.segmento) },
+      cols: [{ label: "Cliente", get: (r) => thumb(r.logoId, r.nome) }, { label: "CNPJ", get: txt("cnpj") }, { label: "Contato", get: (r) => escH([r.contatoNome, r.contato, r.telefone].filter(Boolean).join(" · ") || "—") }, { label: "Cidade", get: (r) => escH([r.cidade, r.uf].filter(Boolean).join("/") || "—") }, { label: "Segmento", get: (r) => (r.segmento ? pill(r.segmento) : "—") },
         { label: "Receita (12m)", num: true, get: (r) => BRL(sum(receber().filter((c) => c.parceiro === r.nome && c.status === "pago"), (c) => c.valor)) },
         { label: "Em aberto", num: true, get: (r) => BRL(sum(receber().filter((c) => c.parceiro === r.nome && c.status !== "pago"), (c) => c.valor)) }],
-      actions: editDel("clientes") }),
+      actions: (r) => [docsAction("clientes")(r), ...editDel("clientes")(r)] }),
   } },
   contratos: { label: "Contratos", render: renderContratos },
   servicos: { label: "Projetos e serviços", render: renderServicos },
@@ -714,7 +929,7 @@ function renderContratos() {
       { label: "Parcelas", get: (r) => `${r.restantes}/${r.total} restantes` },
       { label: "Cobrança automática", get: (r) => (r.status === "vigente" ? `todo dia ${Math.min(28, Math.max(1, Number(r.diaVencimento) || 10))}` : "—") }, { label: "Status", get: (r) => pill(r.status) }],
     actions: (r) => [r.status === "vigente" && { label: "Gerar próxima agora", fn: () => gerarParcela(db.contratos.find((k) => k.id === r.id)) },
-      ...editDel("contratos")(db.contratos.find((k) => k.id === r.id))] });
+      docsAction("contratos")(r), ...editDel("contratos")(db.contratos.find((k) => k.id === r.id))] });
 }
 
 function renderServicos() {
@@ -747,9 +962,9 @@ function renderPessoas() {
     ${kpi("Custo total da folha", BRL(folha), `com ${cfg().encargos}% de encargos`)}
   </div>` + table({ title: "Colaboradores", rows: db.colaboradores, addCol: "colaboradores", addDefaults: { admissao: TODAY, area: "Criação" },
     extra: `<button class="btn-ghost" data-act="${reg(() => exportarCSV(`folha-${monthKey(TODAY)}.csv`, ["Nome", "Cargo", "Área", "Salário", "Benefícios", "Admissão"], db.colaboradores.map((e) => [e.nome, e.cargo, e.area, e.salario.toFixed(2), e.beneficios.toFixed(2), fmtDate(e.admissao)])))}">Exportar p/ folha (CSV)</button>`,
-    cols: [{ label: "Nome", get: txt("nome") }, { label: "Cargo", get: txt("cargo") }, { label: "Área", get: (r) => pill(r.area) }, { label: "Admissão", get: date("admissao") },
+    cols: [{ label: "Nome", get: (r) => thumb(r.fotoId, r.nome, true) }, { label: "Cargo", get: txt("cargo") }, { label: "Área", get: (r) => pill(r.area) }, { label: "Vínculo", get: (r) => escH(r.vinculo || "—") }, { label: "Admissão", get: date("admissao") },
       { label: "Salário", get: money("salario"), num: true }, { label: "Benefícios", get: money("beneficios"), num: true }, { label: "Custo mensal", num: true, get: (r) => BRL(r.salario * encargo() + r.beneficios) }],
-    actions: editDel("colaboradores") }) +
+    actions: (r) => [docsAction("colaboradores")(r), ...editDel("colaboradores")(r)] }) +
   table({ title: "Custo por área", filter: false, rows: areas.map((a) => { const l = db.colaboradores.filter((e) => e.area === a); return { area: a, n: l.length, custo: sum(l, (e) => e.salario * encargo() + e.beneficios) }; }),
     cols: [{ label: "Área", get: txt("area") }, { label: "Pessoas", get: (r) => r.n, num: true }, { label: "Custo mensal", get: money("custo"), num: true }] });
 }
