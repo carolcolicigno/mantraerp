@@ -178,7 +178,7 @@ svg.fill { fill: currentColor; stroke: none; }
 .bars__group { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
 .bars__pair { display: flex; gap: 4px; align-items: flex-end; height: 100%; }
 .bars__pair i { width: 14px; border-radius: 4px 4px 0 0; display: block; }
-.bars__in { background: #3cc04b; } .bars__out { background: #f26b1d; }
+.bars__in { background: #8b75d0; } .bars__out { background: #f4a66a; }
 .bars__label { font-size: 11px; color: var(--text-2); }
 .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
@@ -271,3 +271,84 @@ h1, h2, .erp__title, .projects__title, .main__title, .panel__title { font-family
 .login__btn:hover { background: var(--accent-2); }
 .login__btn:disabled { opacity: .6; cursor: wait; }
 @media (min-width: 1400px) { .login__wrap, .login__card { width: 330px; } }
+
+/* ===== Tons do Mantra Check-in ===== */
+:root { --bg: #f6f6fb; --line: #ecebf3; --muted-surface: #f3f1fa; --lav: #efecfa; --text: #1b1630; --text-2: #6b6880; --radius: 22px; }
+body { padding: 0; background: var(--bg); color: var(--text); }
+.app { height: 100vh; border-radius: 0; box-shadow: none; background: var(--bg); }
+.login { min-height: 100vh; }
+.rail { background: #fff; border-right: 1px solid var(--line); }
+.rail__btn { color: #5d5975; }
+.rail__btn:hover { background: var(--lav); color: var(--accent); }
+.rail__btn.is-active { color: #fff; }
+
+/* Cabeçalho das páginas */
+.erp__header { padding: 40px 40px 8px; background: transparent; }
+.erp__title { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 34px; letter-spacing: -0.035em; color: var(--text); line-height: 1.05; }
+.erp__title span { color: var(--accent); }
+.erp__header .crumbs { font-size: 15px; color: #57536b; margin-top: 8px; font-weight: 500; }
+.erp__header .crumbs .hello { display: block; margin-top: 14px; font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #6b6880; }
+
+/* Abas em pílula */
+.erp__tabs { margin: 18px 40px 0; padding: 5px; border: 0; background: var(--lav); border-radius: 14px; display: flex; gap: 4px; width: fit-content; max-width: calc(100% - 80px); }
+.erp__tabs button { border: 0; padding: 9px 20px; border-radius: 10px; color: #6b6880; font-weight: 500; font-size: 14px; }
+.erp__tabs button:hover { color: var(--text); }
+.erp__tabs button.is-active { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(40, 24, 90, .10); }
+.erp__body { background: var(--bg); padding: 28px 40px 48px; gap: 22px; }
+
+/* Cartões */
+.kpi, .panel, .card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 10px rgba(40, 24, 90, .04); }
+.kpi { padding: 20px 22px; }
+.kpi__label { font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #6b6880; }
+.kpi__value { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 26px; letter-spacing: -0.03em; margin-top: 10px; }
+.kpi__hint { font-size: 12px; color: #6b6880; margin-top: 6px; }
+.pos { color: #2f9e55; } .neg { color: #d6455d; }
+.panel { padding: 24px 26px; }
+.panel__title { font-family: "Archivo", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--text); }
+.panel__title .pill { letter-spacing: 0; }
+.table th { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6b6880; }
+.table td { font-size: 14px; border-color: var(--line); }
+.table tbody tr:hover td { background: #faf9fe; }
+
+/* Botões e campos */
+.btn-primary { border-radius: 12px; padding: 10px 18px; font-weight: 600; box-shadow: 0 4px 12px rgba(110, 79, 198, .25); }
+.btn-ghost { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 9px 16px; box-shadow: 0 1px 2px rgba(40, 24, 90, .05); }
+.filter-input, .form-grid input, .form-grid select, .form-grid textarea { border-color: var(--line); border-radius: 12px; background: #fff; }
+.filter-input:focus, .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110, 79, 198, .14); }
+.form-grid label { font-size: 13px; font-weight: 600; color: var(--text); }
+.row-actions button, .btn-mini { border-radius: 9px; background: var(--lav); color: #4b3f80; }
+.row-actions button.main { background: var(--accent); color: #fff; }
+.row-actions button.ok { background: #e3f6e9; color: #22743f; }
+.row-actions button.no { background: #fdebee; color: #b3263e; }
+.dialog { border-radius: 24px; box-shadow: 0 20px 60px rgba(40, 24, 90, .18); }
+.dialog h2 { font-family: "Archivo", sans-serif; font-weight: 800; letter-spacing: -0.02em; }
+
+/* Selos */
+.pill { border-radius: 999px; font-weight: 600; background: var(--lav); color: #4b3f80; }
+.pill--green { background: #e3f6e9; color: #22743f; } .pill--red { background: #fdebee; color: #b3263e; }
+.pill--yellow { background: #fff4dc; color: #8a6200; } .pill--blue { background: #ece8fb; color: var(--accent); }
+.pill--purple { background: #f1e8fb; color: #7a3fb3; }
+
+/* Gráfico de barras com trilho lilás */
+.bars { height: 220px; }
+.bars__pair i { width: 18px; border-radius: 8px 8px 4px 4px; }
+.bars__label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.meter { background: var(--lav); height: 8px; }
+.meter i { background: #8b75d0; }
+
+/* Kanban no mesmo tom */
+.projects { background: #fff; border-right: 1px solid var(--line); }
+.projects__title, .main__title { font-family: "Archivo", sans-serif; font-weight: 800; letter-spacing: -0.03em; }
+.project.is-active { background: var(--lav); }
+.status-tabs button.is-active, .views button.is-active { background: var(--accent); }
+.app > .main { background: var(--bg); }
+.main__header, .subnav { background: #fff; }
+.board-wrap { background: var(--bg); }
+
+@media (max-width: 1000px) {
+  .erp__header { padding: 24px 16px 4px; }
+  .erp__title { font-size: 26px; }
+  .erp__tabs { margin: 14px 16px 0; max-width: calc(100% - 32px); overflow-x: auto; }
+  .erp__body { padding: 20px 16px 40px; }
+}
+.rail__btn.is-active, .rail__btn.is-active:hover { color: #fff; background: linear-gradient(135deg, #b44fc9, #e94aa6 45%, #f6884e); }

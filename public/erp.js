@@ -1052,6 +1052,19 @@ function renderConfig() {
     </ol></div>`;
 }
 
+const SUBTITULOS = {
+  overview: "Gestão financeira, comercial e de pessoas da agência",
+  financeiro: "Contas a pagar e receber, fluxo de caixa e conciliação com o extrato do banco.",
+  faturamento: "Notas fiscais de serviço, impostos e envio à contabilidade.",
+  compras: "Solicitações, cotações lado a lado, aprovações e fornecedores.",
+  vendas: "Propostas, pedidos, follow-ups e cadastro de clientes.",
+  contratos: "Vigências, reajustes, parcelas e cobranças recorrentes automáticas.",
+  servicos: "Orçamento, horas, custos e rentabilidade por projeto e por cliente.",
+  pessoas: "Colaboradores, remuneração, benefícios e documentos.",
+  relatorios: "Receita, despesas, inadimplência e resultado por área e por cliente.",
+  aprovacoes: "Aprovações, usuários, permissões, configurações e histórico de alterações.",
+};
+
 /* ---------- Navegação ---------- */
 const appEl = document.querySelector(".app");
 const erpEl = document.getElementById("erp");
@@ -1078,8 +1091,12 @@ function renderView() {
   erpEl.hidden = isKanban;
   if (isKanban) return renderKanban();
   actionRegistry = new Map();
-  document.getElementById("erpTitle").textContent = mod.label;
-  document.getElementById("erpCrumbs").textContent = `Mantra ERP / ${mod.label} · ${currentUser().nome} (${PERFIS[currentUser().perfil].label})`;
+  // Título em duas cores, como no Mantra Check-in: primeira palavra escura, resto em roxo.
+  const [p1, ...resto] = (state2.mod === "overview" ? "Mantra Home" : mod.label).toUpperCase().split(" ");
+  document.getElementById("erpTitle").innerHTML = `${escH(p1)} <span>${escH(resto.join(" "))}</span>`;
+  document.getElementById("erpCrumbs").innerHTML = state2.mod === "overview"
+    ? `${escH(SUBTITULOS.overview)}<span class="hello">Olá, ${escH(currentUser().nome.split(" ")[0])}! O que vamos fazer hoje?</span>`
+    : escH(SUBTITULOS[state2.mod] || "");
   document.getElementById("erpHeadActions").innerHTML = state2.mod === "overview"
   && currentUser().perfil === "admin"
     ? `<button class="btn-ghost" data-act="${reg(async () => { if (confirm("Restaurar os dados de exemplo? Todos os registros (exceto usuários) serão apagados.")) { try { await syncChain; await apiFetch("/api/reset", {}); await loadData(); toast("Dados de exemplo restaurados"); renderView(); } catch (e) { toast(e.message); } } })}">Restaurar dados de exemplo</button>` : "";
