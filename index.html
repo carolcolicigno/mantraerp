@@ -36,10 +36,10 @@
 
     <!-- Project list -->
     <aside class="projects">
-      <h1 class="projects__title">All Projects</h1>
+      <h1 class="projects__title">Todos os projetos</h1>
       <label class="search">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-        <input id="search" type="search" placeholder="Search Project" />
+        <input id="search" type="search" placeholder="Buscar projeto" />
       </label>
       <div class="status-tabs" role="tablist" id="statusTabs"></div>
       <ul class="project-list" id="projectList"></ul>
@@ -49,22 +49,21 @@
     <main class="main">
       <header class="main__header">
         <div>
-          <h2 class="main__title"><span id="projectName"></span> <span class="bolt">⚡</span></h2>
+          <h2 class="main__title"><span id="projectName"></span> </h2>
           <p class="crumbs" id="crumbs"></p>
         </div>
         <div class="main__actions">
-          <button class="icon-btn" id="starBtn" aria-pressed="false" title="Favorite"><svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg></button>
-          <button class="icon-btn" title="More"><svg viewBox="0 0 24 24" class="fill"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+          <button class="icon-btn" id="starBtn" aria-pressed="false" title="Favorito"><svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg></button>
+          <button class="icon-btn" title="Mais"><svg viewBox="0 0 24 24" class="fill"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
         </div>
       </header>
 
       <div class="subnav">
         <div class="tabs" role="tablist" id="pageTabs">
-          <button>Discussion</button><button class="is-active">Tasks</button><button>Timelines</button><button>Files</button><button>Overview</button>
+          <button class="is-active">Tarefas</button>
         </div>
         <div class="members">
-          <div class="avatars"><span class="av av--1"></span><span class="av av--2"></span><span class="av av--3"></span><span class="av av--more">+11</span></div>
-          <button class="add-member" title="Add member">+</button>
+          <div class="avatars" id="teamAvatars"></div>
         </div>
       </div>
 
@@ -72,12 +71,11 @@
         <div class="toolbar">
           <div class="views" id="views">
             <button class="is-active" data-view="kanban"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="16" rx="1"/><rect x="14" y="4" width="6" height="16" rx="1"/></svg>Kanban</button>
-            <button data-view="table"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 10h16M4 15h16M10 4v16"/></svg>Table</button>
-            <button data-view="list"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>List View</button>
+            <button data-view="table"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 10h16M4 15h16M10 4v16"/></svg>Tabela</button>
+            <button data-view="list"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>Lista</button>
           </div>
           <div class="toolbar__right">
-            <button class="btn-primary" id="newBoard">+ New Board</button>
-            <button class="btn-ghost"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Filter</button>
+            <button class="btn-primary" id="newBoard">+ Nova tarefa</button>
           </div>
         </div>
         <div id="board"></div>
@@ -100,6 +98,7 @@
       <h2 id="formTitle"></h2>
       <div class="form-grid" id="formFields"></div>
       <div class="dialog__actions">
+        <button type="button" class="btn-ghost no" id="formDelete" hidden>Excluir</button>
         <button type="button" class="btn-ghost" id="formCancel">Cancelar</button>
         <button type="submit" class="btn-primary">Salvar</button>
       </div>

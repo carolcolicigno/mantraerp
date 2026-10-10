@@ -30,6 +30,7 @@ const WRITE = {
   contratos: ["contratos", "vendas"],
   projetos: ["servicos", "vendas"],
   colaboradores: ["pessoas"],
+  tarefas: ["projetos", "servicos"],
   usuarios: [], // só admin
   config: [], // só admin
 };
@@ -52,7 +53,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY AUTOINCREMENT, quando TEXT NOT NULL, usuario TEXT NOT NULL, acao TEXT NOT NULL, detalhe TEXT NOT NULL);
 `);
 const q = {
-  all: db.prepare("SELECT id, data FROM records WHERE col = ?"),
+  all: db.prepare("SELECT id, data FROM records WHERE col = ? ORDER BY rowid"),
   get: db.prepare("SELECT data FROM records WHERE col = ? AND id = ?"),
   put: db.prepare("INSERT INTO records (col, id, data) VALUES (?, ?, ?) ON CONFLICT(col, id) DO UPDATE SET data = excluded.data"),
   del: db.prepare("DELETE FROM records WHERE col = ? AND id = ?"),
@@ -100,6 +101,11 @@ function seedNegocio() {
   if (!getRec("config", "geral")) q.put.run("config", "geral", JSON.stringify(CONFIG_PADRAO));
 }
 
+// Bancos criados antes do Kanban: adiciona as tarefas de exemplo uma única vez.
+if (listCol("usuarios").length && !listCol("tarefas").length && getRec("projetos", "j1") && !getRec("config", "kanban")) {
+  tx(() => { for (const r of seed().tarefas) q.put.run("tarefas", r.id, JSON.stringify(r)); q.put.run("config", "kanban", JSON.stringify({ id: "kanban", migrado: true })); });
+}
+
 // Primeira inicialização: cria dados de exemplo e usuários com senha inicial.
 if (!listCol("usuarios").length) {
   const senha = process.env.SEED_PASSWORD || crypto.randomBytes(6).toString("base64url");
@@ -121,7 +127,7 @@ function dadosPara(u) {
   const out = {};
   for (const col of COLLECTIONS) out[col] = listCol(col);
   if (!hasModule(u, "pessoas")) out.colaboradores = out.colaboradores.map(({ id, nome, cargo, area }) => ({ id, nome, cargo, area }));
-  if (!out.config.length) out.config = [CONFIG_PADRAO];
+  out.config = [out.config.find((c) => c.id === "geral") || CONFIG_PADRAO];
   out.historico = hasModule(u, "aprovacoes") ? q.hist.all() : [];
   return out;
 }

@@ -34,8 +34,8 @@ svg.fill { fill: currentColor; stroke: none; }
 .projects__title { font-size: 26px; font-weight: 600; padding: 0 4px 22px; }
 .search { display: flex; align-items: center; gap: 10px; background: var(--muted-surface); border-radius: 999px; padding: 11px 14px; color: #333; }
 .search input { border: 0; background: transparent; outline: none; font: inherit; font-size: 14px; flex: 1; }
-.status-tabs { display: flex; gap: 6px; margin: 18px 0 14px; }
-.status-tabs button { white-space: nowrap; padding: 6px 10px; border-radius: 999px; font-size: 14px; font-weight: 500; }
+.status-tabs { display: flex; gap: 2px; margin: 18px 0 14px; }
+.status-tabs button { white-space: nowrap; padding: 6px 8px; border-radius: 999px; font-size: 13px; font-weight: 500; }
 .status-tabs button.is-active { background: #000; color: #fff; }
 .project-list { list-style: none; padding: 0; display: grid; gap: 8px; }
 .project { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; cursor: pointer; }
@@ -208,3 +208,7 @@ svg.fill { fill: currentColor; stroke: none; }
   .erp__header, .erp__body { padding-left: 16px; padding-right: 16px; }
   .form-grid { grid-template-columns: 1fr; }
 }
+
+.av--txt { width: 24px; height: 24px; display: grid; place-items: center; font-size: 9px; font-weight: 700; background: var(--pink); color: #8a1f5c; }
+.btn-ghost.no { color: #a61b1b; margin-right: auto; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }

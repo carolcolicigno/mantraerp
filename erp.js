@@ -13,7 +13,7 @@ const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const escH = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 /* ---------- Comunicação com o servidor ---------- */
-const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config"];
+const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas"];
 let db = null;
 let me = null;
 let synced = {};
@@ -131,6 +131,8 @@ const SCHEMAS = {
   projetos: { singular: "Projeto", fields: [
     { k: "nome", label: "Projeto" },
     { k: "cliente", label: "Cliente", type: "select", options: opts("clientes") },
+    { k: "tipo", label: "Tipo", type: "select", options: ["Campanha", "Conteúdo", "Website", "App", "WebApp"] },
+    { k: "status", label: "Status", type: "select", options: ["ativo", "pausado", "encerrado"] },
     { k: "orcamento", label: "Orçamento vendido", type: "money" },
     { k: "custoTerceiros", label: "Custos de terceiros", type: "money" },
     { k: "horas", label: "Horas trabalhadas", type: "number" },
@@ -141,6 +143,15 @@ const SCHEMAS = {
     { k: "area", label: "Área", type: "select", options: ["Diretoria", "Atendimento", "Criação", "Mídia", "Financeiro", "Tecnologia"] },
     { k: "salario", label: "Salário", type: "money" }, { k: "beneficios", label: "Benefícios", type: "money" },
     { k: "admissao", label: "Admissão", type: "date" },
+  ] },
+  tarefas: { singular: "Tarefa", fields: [
+    { k: "titulo", label: "Tarefa", full: true },
+    { k: "etiquetas", label: "Etiquetas (separadas por vírgula)", full: true, optional: true },
+    { k: "col", label: "Status", type: "select", options: ["todo", "progress", "review", "done"], labels: { todo: "A fazer", progress: "Em andamento", review: "Em revisão", done: "Concluído" } },
+    { k: "responsavel", label: "Responsável", type: "select", options: () => ["", ...db.colaboradores.map((c) => c.nome)] },
+    { k: "prazo", label: "Prazo", type: "date", optional: true },
+    { k: "comentarios", label: "Comentários", type: "number" },
+    { k: "anexos", label: "Anexos", type: "number" },
   ] },
   usuarios: { singular: "Usuário", fields: [
     { k: "nome", label: "Nome" }, { k: "email", label: "E-mail" },
@@ -155,19 +166,20 @@ let formCtx = null;
 function openForm(col, record, defaults = {}) {
   const sc = SCHEMAS[col];
   const rec = record || { ...defaults };
-  formCtx = { col, id: record?.id };
+  formCtx = { col, id: record?.id, defaults };
+  document.getElementById("formDelete").hidden = !record;
   document.getElementById("formTitle").textContent = (record ? "Editar " : "Novo ") + sc.singular.toLowerCase();
   document.getElementById("formFields").innerHTML = sc.fields.map((f) => {
     const v = rec[f.k] ?? "";
     let input;
     if (f.type === "select") {
       const o = typeof f.options === "function" ? f.options() : f.options;
-      input = `<select name="${f.k}">${o.map((x) => `<option ${x === v ? "selected" : ""}>${escH(x)}</option>`).join("")}</select>`;
+      input = `<select name="${f.k}">${o.map((x) => `<option value="${escH(x)}" ${x === v ? "selected" : ""}>${escH(f.labels?.[x] ?? x)}</option>`).join("")}</select>`;
     } else if (f.type === "bool") {
       input = `<input type="checkbox" name="${f.k}" ${v ? "checked" : ""} />`;
     } else {
       const t = f.type === "date" ? "date" : f.type === "money" || f.type === "number" ? "number" : f.type === "password" ? "password" : "text";
-      const req = f.type === "password" ? (record ? "" : "required") : "required";
+      const req = f.type === "password" ? (record ? "" : "required") : f.optional ? "" : "required";
       input = `<input type="${t}" name="${f.k}" value="${t === "password" ? "" : escH(v)}" ${t === "number" ? 'step="any"' : ""} ${t === "password" ? 'minlength="8" autocomplete="new-password"' : ""} ${req} />`;
     }
     return `<label class="${f.full ? "full" : ""}">${f.label}${input}</label>`;
@@ -175,6 +187,14 @@ function openForm(col, record, defaults = {}) {
   dialog.showModal();
 }
 document.getElementById("formCancel").addEventListener("click", () => dialog.close());
+document.getElementById("formDelete").addEventListener("click", () => {
+  const { col, id } = formCtx;
+  const r = db[col].find((x) => x.id === id);
+  if (!r || !confirm(`Excluir "${labelOf(r)}"?`)) return;
+  db[col] = db[col].filter((x) => x.id !== id);
+  log("Exclusão", `${SCHEMAS[col].singular}: ${labelOf(r)}`);
+  dialog.close(); render();
+});
 document.getElementById("recordForm").addEventListener("submit", (e) => {
   const { col, id } = formCtx;
   const fd = new FormData(e.target);
@@ -189,7 +209,7 @@ document.getElementById("recordForm").addEventListener("submit", (e) => {
     Object.assign(db[col].find((x) => x.id === id), data);
     log("Edição", `${SCHEMAS[col].singular}: ${labelOf(data)}`);
   } else {
-    const rec = { id: uid(), ...data };
+    const rec = { id: uid(), ...formCtx.defaults, ...data };
     if (col === "contas") Object.assign(rec, { conciliado: false, aprovado: rec.tipo === "receber" || rec.valor < 5000 });
     db[col].push(rec);
     log("Criação", `${SCHEMAS[col].singular}: ${labelOf(data)}`);
@@ -627,7 +647,7 @@ function renderView() {
   const isKanban = state2.mod === "projetos";
   appEl.classList.toggle("erp-mode", !isKanban);
   erpEl.hidden = isKanban;
-  if (isKanban) return;
+  if (isKanban) return renderKanban();
   actionRegistry = new Map();
   document.getElementById("erpTitle").textContent = mod.label;
   document.getElementById("erpCrumbs").textContent = `Mantra ERP / ${mod.label} · ${currentUser().nome} (${PERFIS[currentUser().perfil].label})`;
