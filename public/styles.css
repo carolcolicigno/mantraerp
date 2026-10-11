@@ -380,3 +380,26 @@ label.check { flex-direction: row; align-items: center; gap: 8px; grid-column: 1
 .notif.is-nova { background: var(--lav); border-color: transparent; }
 .notif__texto { white-space: pre-line; font-size: 13px; color: var(--text-2); }
 a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* Nada de texto fora do box */
+.kpis { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.kpi { min-width: 0; }
+.kpi__value { font-size: clamp(19px, 1.55vw, 26px); overflow-wrap: anywhere; line-height: 1.15; }
+.kpi__label, .kpi__hint { overflow-wrap: anywhere; }
+.grid-2 > * { min-width: 0; }
+.table th, .table td { padding: 11px 10px; }
+.table th { letter-spacing: .08em; }
+.table td { overflow-wrap: break-word; }
+.table td.num, .table td .pill { overflow-wrap: normal; }
+.row-actions { max-width: 260px; }
+.panel .table { min-width: 100%; }
+/* Tabelas largas (DRE etc.) rolam dentro do box, com a primeira coluna fixa e sombra indicando que há mais */
+.panel { overflow-x: auto; scrollbar-width: thin; }
+.table--dre td:first-child, .table--dre th:first-child { position: sticky; left: 0; background: #fff; z-index: 1; box-shadow: 6px 0 8px -6px rgba(40, 30, 90, .18); }
+.dre-total td:first-child { background: var(--lav); }
+@media (max-width: 1400px) { .table td { font-size: 13px; } .table th { font-size: 9.5px; } }
+.table--dre th, .table--dre td { padding: 10px 7px; font-size: 12.5px; }
+.table--dre td:first-child { min-width: 200px; max-width: 230px; }
+.table td .pill { white-space: normal; text-align: center; }
+.steps code, .empty code, code { overflow-wrap: anywhere; word-break: break-word; }
+@media (max-width: 1200px) { .row-actions { max-width: 170px; } .grid-2 { grid-template-columns: 1fr; } }

@@ -1392,7 +1392,7 @@ function renderDRE() {
     ["(−) Custos diretos (produção, mídia própria, influenciadores, concorrências)", "diretos", -1], ["= Margem de contribuição", "margem", 0, null, true],
     ["(−) Pessoal", "pessoal", -1, "pesEst"], ["(−) Despesas operacionais (software, estrutura, outros)", "oper", -1], ["= Resultado operacional", "resultado", 0, null, true],
   ];
-  const cel = (v, sinal, est) => `<td class="num ${sinal ? "" : v >= 0 ? "pos" : "neg"}">${v ? (sinal || v < 0 ? "−" : "") + BRL(Math.abs(v)).replace("R$", "").trim() : "—"}${est ? "<sup>*</sup>" : ""}</td>`;
+  const cel = (v, sinal, est) => `<td class="num ${sinal ? "" : v >= 0 ? "pos" : "neg"}">${v ? (sinal || v < 0 ? "−" : "") + Math.round(Math.abs(v)).toLocaleString("pt-BR") : "—"}${est ? "<sup>*</sup>" : ""}</td>`;
   const mgem = tot.bruta - tot.repasses ? tot.resultado / (tot.bruta - tot.repasses) : 0;
   return `<div class="kpis">
     ${kpi(`Receita líquida ${anoRel}`, BRL(tot.liquida), `bruta ${BRL(tot.bruta)}`)}
@@ -1401,7 +1401,7 @@ function renderDRE() {
   </div>
   <div class="panel"><div class="panel__head"><h3 class="panel__title">DRE gerencial ${anoRel}</h3><div style="display:flex;gap:8px">${selAno()}
     <button class="btn-ghost" data-act="${reg(() => exportarCSV(`dre-${anoRel}.csv`, ["Linha", ...meses, "Total"], linhas.map(([l, k, sg]) => [l, ...d.map((x) => (sg ? -x[k] : x[k]).toFixed(2)), (sg ? -tot[k] : tot[k]).toFixed(2)])))}">Exportar CSV</button></div></div>
-    <table class="table table--dre"><thead><tr><th>R$</th>${meses.map((m) => `<th class="num">${monthLabel(m)}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
+    <table class="table table--dre"><thead><tr><th>R$ (sem centavos)</th>${meses.map((m) => `<th class="num">${new Date(m + "-15T12:00:00").toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
       ${linhas.map(([l, k, sg, est, forte]) => `<tr class="${forte ? "dre-total" : ""}"><td>${l}</td>${d.map((x) => cel(x[k], sg, est && x[est])).join("")}${cel(tot[k], sg)}</tr>`).join("")}
     </tbody></table>
     <p class="empty">Regime de competência pelo vencimento dos lançamentos. <sup>*</sup> Estimado: impostos pela alíquota de Configurações quando não há lançamento na categoria "Impostos"; pessoal pelo custo da folha quando não há lançamento na categoria "Pessoal".</p></div>`;
