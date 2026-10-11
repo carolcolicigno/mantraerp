@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mantra ERP</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg" />
+  <link rel="apple-touch-icon" href="logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="login" id="login" hidden>
+    <div class="login__wrap">
+      <img class="login__brand" src="mantra-logo.png" alt="Mantra" width="150" height="31" />
+      <h1 class="login__title">MANTRA <span>ERP</span></h1>
+      <p class="login__tagline">Gestão da agência em um só lugar.</p>
+      <form class="login__card" id="loginForm" novalidate>
+        <h2 class="login__hello">HELLO!</h2>
+        <p class="login__sub">BOM TE VER POR AQUI.</p>
+        <label class="login__label" for="loginEmail">E-MAIL</label>
+        <input id="loginEmail" name="email" type="email" autocomplete="username" placeholder="seu.email@agenciamantra.com.br" required />
+        <div class="login__row"><label class="login__label" for="loginSenha">SENHA</label><button type="button" class="login__forgot" id="loginForgot">ESQUECEU A SENHA?</button></div>
+        <div class="login__pass"><input id="loginSenha" name="senha" type="password" autocomplete="current-password" required />
+          <button type="button" class="login__eye" id="loginEye" aria-label="Mostrar senha" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+        <p class="login__erro" id="loginErro" role="alert"></p>
+        <button class="login__btn" type="submit">ENTRAR</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="app" hidden>
+    <!-- Icon rail -->
+    <nav class="rail" aria-label="Main">
+      <a href="#" class="rail__logo" id="homeLink" title="Início" aria-label="Mantra — ir para o início"><img src="logo.svg" alt="Mantra" width="36" height="36" /></a>
+      <div id="railModules" class="rail__modules"></div>
+      <div id="userMenu" class="user-menu"></div>
+    </nav>
+
+    <!-- Project list -->
+    <aside class="projects">
+      <h1 class="projects__title">Todos os projetos</h1>
+      <label class="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input id="search" type="search" placeholder="Buscar projeto" />
+      </label>
+      <div class="status-tabs" role="tablist" id="statusTabs"></div>
+      <ul class="project-list" id="projectList"></ul>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="main__header">
+        <div>
+          <h2 class="main__title"><span id="projectName"></span> </h2>
+          <p class="crumbs" id="crumbs"></p>
+        </div>
+        <div class="main__actions">
+          <button class="icon-btn" id="starBtn" aria-pressed="false" title="Favorito"><svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg></button>
+          <button class="icon-btn" title="Mais"><svg viewBox="0 0 24 24" class="fill"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+        </div>
+      </header>
+
+      <div class="subnav">
+        <div class="tabs" role="tablist" id="pageTabs">
+          <button class="is-active">Tarefas</button>
+        </div>
+        <div class="members">
+          <div class="avatars" id="teamAvatars"></div>
+        </div>
+      </div>
+
+      <section class="board-wrap">
+        <div class="toolbar">
+          <div class="views" id="views">
+            <button class="is-active" data-view="kanban"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="16" rx="1"/><rect x="14" y="4" width="6" height="16" rx="1"/></svg>Kanban</button>
+            <button data-view="table"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 10h16M4 15h16M10 4v16"/></svg>Tabela</button>
+            <button data-view="list"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>Lista</button>
+          </div>
+          <div class="toolbar__right">
+            <button class="btn-primary" id="newBoard">+ Nova tarefa</button>
+          </div>
+        </div>
+        <div id="board"></div>
+      </section>
+    </main>
+
+    <!-- ERP modules -->
+    <section class="erp" id="erp" hidden>
+      <header class="erp__header">
+        <div><h1 class="erp__title" id="erpTitle"></h1><p class="crumbs" id="erpCrumbs"></p></div>
+        <div class="erp__headActions" id="erpHeadActions"></div>
+      </header>
+      <div class="erp__tabs tabs" id="erpTabs" role="tablist"></div>
+      <div class="erp__body" id="erpBody"></div>
+    </section>
+  </div>
+
+  <dialog id="formDialog" class="dialog">
+    <form method="dialog" id="recordForm">
+      <h2 id="formTitle"></h2>
+      <div class="form-grid" id="formFields"></div>
+      <div class="dialog__actions">
+        <button type="button" class="btn-ghost no" id="formDelete" hidden>Excluir</button>
+        <button type="button" class="btn-ghost" id="formCancel">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="senhaDialog" class="dialog">
+    <form id="senhaForm">
+      <h2>Trocar senha</h2>
+      <div class="form-grid">
+        <label class="full">Senha atual<input name="atual" type="password" autocomplete="current-password" required /></label>
+        <label>Nova senha<input name="nova" type="password" minlength="8" autocomplete="new-password" required /></label>
+        <label>Confirmar nova senha<input name="confirma" type="password" minlength="8" autocomplete="new-password" required /></label>
+      </div>
+      <div class="dialog__actions">
+        <button type="button" class="btn-ghost" id="senhaCancel">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+  <script src="erp.js"></script>
+</body>
+</html>

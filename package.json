@@ -1,0 +1,16 @@
+{
+  "name": "mantra-erp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ERP da agência Mantra — financeiro, faturamento, compras, vendas, contratos, projetos, pessoas e relatórios.",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning server/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "pg": "^8.16.0"
+  }
+}
