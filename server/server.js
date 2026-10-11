@@ -114,12 +114,32 @@ async function acessoUnico() {
   await log("Sistema", "Acesso único aplicado", `Somente ${email} mantido como administrador`);
 }
 
+// Uma vez por banco: troca nomes de marcas reais dos dados de exemplo por nomes genéricos.
+async function anonimizarExemplos() {
+  if (await getRec("config", "anonimizar-v1")) return;
+  if (!(await listCol("usuarios")).length) return; // banco novo: os exemplos já nascem sem marcas
+  const { trocar } = require("./anonimizar");
+  const exemplos = seed();
+  let n = 0;
+  await store.tx(async (s) => {
+    // Só mexe nos registros de exemplo (mesmo id dos dados de demonstração); cadastros reais ficam intactos.
+    for (const col of COLLECTIONS) for (const r of await s.all(col)) {
+      if (!(exemplos[col] || []).some((x) => x.id === r.id)) continue;
+      const antes = JSON.stringify(r), depois = trocar(antes);
+      if (depois !== antes) { await s.put(col, r.id, { ...JSON.parse(depois), _rev: (Number(r._rev) || 0) + 1 }); n++; }
+    }
+    await s.put("config", "anonimizar-v1", { id: "anonimizar-v1", em: new Date().toISOString(), registros: n });
+  });
+  if (n) await log("Sistema", "Dados de exemplo sem marcas", `${n} registros atualizados`);
+}
+
 // Prepara o banco uma vez por processo: dados de exemplo e usuários iniciais.
 let pronto = null;
 function init() {
   return (pronto ||= (async () => {
     if (!store) return;
     await acessoUnico();
+    await anonimizarExemplos();
     const usuarios = await listCol("usuarios");
     if (usuarios.length) {
       // Bancos criados antes do Kanban: adiciona as tarefas de exemplo uma única vez.
