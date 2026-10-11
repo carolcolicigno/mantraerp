@@ -97,11 +97,29 @@ async function seedNegocio(s) {
   if (!(await s.get("config", "geral"))) await s.put("config", "geral", CONFIG_PADRAO);
 }
 
+// Acesso único: com ADMIN_EMAIL e ADMIN_PASSWORD definidos, deixa só esse administrador (uma vez por e-mail/senha).
+async function acessoUnico() {
+  const email = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase(), senha = process.env.ADMIN_PASSWORD || "";
+  if (!email || !senha) return;
+  const marca = crypto.createHash("sha256").update(`${email}|${senha}`).digest("hex");
+  if ((await getRec("config", "acesso-unico"))?.marca === marca) return;
+  await store.tx(async (s) => {
+    const usuarios = await s.all("usuarios");
+    const base = usuarios.find((u) => u.email.toLowerCase() === email) || usuarios.find((u) => u.perfil === "admin") || { id: "u1" };
+    for (const u of usuarios) if (u.id !== base.id) { await s.del("usuarios", u.id); await s.delCred(u.id); await s.delUserSess(u.id); }
+    await s.put("usuarios", base.id, { ...base, nome: base.nome || "Carolina Colicigno", email, perfil: "admin", ativo: true, modulos: [], _rev: (Number(base._rev) || 0) + 1 });
+    const h = hashSenha(senha); await s.putCred(base.id, h.hash, h.salt); await s.delUserSess(base.id);
+    await s.put("config", "acesso-unico", { id: "acesso-unico", marca, em: new Date().toISOString() });
+  });
+  await log("Sistema", "Acesso único aplicado", `Somente ${email} mantido como administrador`);
+}
+
 // Prepara o banco uma vez por processo: dados de exemplo e usuários iniciais.
 let pronto = null;
 function init() {
   return (pronto ||= (async () => {
     if (!store) return;
+    await acessoUnico();
     const usuarios = await listCol("usuarios");
     if (usuarios.length) {
       // Bancos criados antes do Kanban: adiciona as tarefas de exemplo uma única vez.
