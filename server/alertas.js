@@ -1,14 +1,10 @@
-// Alertas para a equipe no Slack e/ou WhatsApp.
-// Slack: SLACK_WEBHOOK_URL (webhook de entrada do canal).
+// Alertas para a equipe: sempre como notificação no app (e no navegador, com o ERP aberto) e,
+// se configurado, também no WhatsApp.
 // WhatsApp (API oficial da Meta): WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_PARA (números com DDI, separados por vírgula)
 // e, opcionalmente, WHATSAPP_TEMPLATE (modelo aprovado com 1 variável de texto; sem ele a Meta só entrega
 // texto livre a quem falou com o número nas últimas 24 h).
-const canais = () => ({ slack: !!process.env.SLACK_WEBHOOK_URL, whatsapp: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID && process.env.WHATSAPP_PARA) });
-
-async function slack(texto) {
-  const r = await fetch(process.env.SLACK_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: texto }) });
-  if (!r.ok) throw new Error(`Slack: erro ${r.status}`);
-}
+const crypto = require("node:crypto");
+const canais = () => ({ whatsapp: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID && process.env.WHATSAPP_PARA) });
 async function whatsapp(texto) {
   const url = `https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_ID}/messages`;
   const tpl = process.env.WHATSAPP_TEMPLATE;
@@ -21,13 +17,15 @@ async function whatsapp(texto) {
   }
 }
 
-// Envia para todos os canais configurados; falhas são devolvidas, não lançadas.
-async function enviar(texto) {
-  const c = canais(), erros = [];
-  if (c.slack) await slack(texto).catch((e) => erros.push(e.message));
-  if (c.whatsapp) await whatsapp(texto).catch((e) => erros.push(e.message));
-  return { enviado: (c.slack || c.whatsapp) && erros.length < Number(c.slack) + Number(c.whatsapp), erros };
+// Grava a notificação no app (área: financeiro, influenciadores ou geral) e manda no WhatsApp se ligado.
+async function notificar(store, { titulo, texto, area = "geral", modulo = "", whatsappLigado = false }) {
+  const n = { id: `n-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`, data: new Date().toISOString(), titulo: String(titulo).slice(0, 140), texto: String(texto || "").slice(0, 2000), area, modulo };
+  await store.put("notificacoes", n.id, n);
+  const erros = [];
+  if (whatsappLigado && canais().whatsapp) await whatsapp(`*${n.titulo}*\n${n.texto}`).catch((e) => erros.push(e.message));
+  return { notificacao: n, erros };
 }
+const enviarWhatsapp = (texto) => whatsapp(texto);
 
 const BRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmt = (d) => String(d || "").split("-").reverse().join("/");
@@ -50,4 +48,4 @@ async function resumoDiario(store) {
   return linhas.join("\n");
 }
 
-module.exports = { canais, enviar, resumoDiario, BRL };
+module.exports = { canais, notificar, enviarWhatsapp, resumoDiario, BRL };

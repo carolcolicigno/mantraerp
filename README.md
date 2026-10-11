@@ -95,6 +95,6 @@ Variáveis: `GOOGLE_SERVICE_ACCOUNT` (JSON da conta de serviço com delegação 
 
 - **Arquivos:** com o Drive configurado, documentos vão para `Arquivos do ERP/<cadastro>/<nome>` e o banco guarda só a referência (logos e fotos continuam no banco). Em Configurações há o botão para mover os documentos antigos.
 - **Backup:** diário às 8h para `Backups do ERP` no Drive, e download manual em Configurações (administradores).
-- **Alertas:** Slack (`SLACK_WEBHOOK_URL`) e/ou WhatsApp Cloud API (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_PARA`, opcional `WHATSAPP_TEMPLATE`). Liga/desliga em Configurações.
+- **Notificações:** sino no app + aviso do navegador (sem configuração) e, opcionalmente, WhatsApp Cloud API (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_PARA`, opcional `WHATSAPP_TEMPLATE`). Liga/desliga em Configurações.
 - **Limite de IA:** teto mensal em US$ em Configurações; ao atingir, a leitura automática pausa e avisa.
 - **Relatórios:** DRE gerencial, orçado × realizado, rentabilidade por cliente. **Mídia e repasses** fica em Financeiro.

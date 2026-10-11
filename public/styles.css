@@ -375,3 +375,8 @@ label.check { flex-direction: row; align-items: center; gap: 8px; grid-column: 1
 .table--dre td, .table--dre th { white-space: nowrap; font-size: 12.5px; }
 .table--dre td:first-child { white-space: normal; min-width: 240px; }
 .dre-total td { font-weight: 700; background: var(--lav); }
+.notif-lista { display: grid; gap: 8px; max-height: 60vh; overflow: auto; min-width: min(520px, 80vw); }
+.notif { display: grid; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid var(--line); width: 100%; }
+.notif.is-nova { background: var(--lav); border-color: transparent; }
+.notif__texto { white-space: pre-line; font-size: 13px; color: var(--text-2); }
+a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }

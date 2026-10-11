@@ -53,7 +53,7 @@ async function sincronizar(ctx, { limite = 12 } = {}) {
   if (limiteUsd && gastoMes >= limiteUsd) {
     const st = (await store.get("config", "inbox-status")) || { id: "inbox-status" };
     const msg = `Limite mensal de IA atingido (US$ ${gastoMes.toFixed(2)} de US$ ${limiteUsd.toFixed(2)}). A leitura automática foi pausada até o próximo mês ou até o limite ser aumentado em Configurações.`;
-    if (st.alertaLimite !== mes) { await ctx.alerta?.(`🚫 ${msg}`); await ctx.log("Limite de IA atingido", msg); }
+    if (st.alertaLimite !== mes) { await ctx.alerta?.("🚫 Limite mensal de IA atingido", msg, "financeiro", "aprovacoes"); await ctx.log("Limite de IA atingido", msg); }
     await store.put("config", "inbox-status", { ...st, ultimaSync: new Date().toISOString(), erros: [msg], alertaLimite: mes });
     return { novos, erros: [msg], pendentes: false, limiteAtingido: true };
   }
@@ -78,9 +78,11 @@ async function sincronizar(ctx, { limite = 12 } = {}) {
   }
   const anterior = (await store.get("config", "inbox-status")) || {};
   await store.put("config", "inbox-status", { ...anterior, id: "inbox-status", ultimaSync: new Date().toISOString(), erros: erros.slice(0, 5) });
-  if (novos.length && ctx.alerta) {
-    const BRLx = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    await ctx.alerta([`📥 ${novos.length} documento(s) novo(s) por e-mail:`, ...novos.slice(0, 8).map((e) => `   • ${NOME_TIPO[e.tipo] || e.tipo} — ${e.entidade?.nome || e.emitente || e.de}${e.valor ? ` — ${BRLx(e.valor)}` : ""}${e.vencimento ? ` (vence ${e.vencimento.split("-").reverse().join("/")})` : ""}`)].join("\n"));
+  const BRLx = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  for (const area of ["financeiro", "influenciadores"]) {
+    const daArea = novos.filter((e) => e.area === area);
+    if (!daArea.length || !ctx.alerta) continue;
+    await ctx.alerta(`📥 ${daArea.length} documento(s) novo(s) em ${area}@`, daArea.slice(0, 8).map((e) => `   • ${NOME_TIPO[e.tipo] || e.tipo} — ${e.entidade?.nome || e.emitente || e.de}${e.valor ? ` — ${BRLx(e.valor)}` : ""}${e.vencimento ? ` (vence ${e.vencimento.split("-").reverse().join("/")})` : ""}`).join("\n"), area, "emails");
   }
   return { novos, erros, pendentes: restante < 0 };
 }

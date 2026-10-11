@@ -100,6 +100,10 @@ module.exports = () => ({
     { id: "ex-2", exemplo: true, caixa: "influenciadores@agenciamantra.com.br", area: "influenciadores", de: "Duda Martins <contato@dudamartins.com>", assunto: "Nota fiscal campanha Natal", data: m(0, 3) + "T18:02:00.000Z", tipo: "nota_fiscal", direcao: "a_pagar", resumo: "NF da influenciadora Duda Martins pela campanha Natal Natura.", emitente: "Duda Martins", numero: "88", valor: 18000, vencimento: m(0, 20), influenciador: "@dudamartins", campanha: "Natal Natura", entidade: { col: "influenciadores", id: "i1", nome: "Duda Martins" }, status: "novo", anexos: [{ nome: "nf-88.pdf", tipo: "application/pdf" }] },
     { id: "ex-3", exemplo: true, caixa: "financeiro@agenciamantra.com.br", area: "financeiro", de: "juridico@vivo.com.br", assunto: "Aditivo contratual assinado", data: m(0, 1) + "T10:00:00.000Z", tipo: "contrato", direcao: "informativo", resumo: "Aditivo do contrato Vivo assinado digitalmente.", emitente: "Vivo", valor: 0, entidade: { col: "clientes", id: "c2", nome: "Vivo" }, status: "novo", anexos: [{ nome: "aditivo-vivo.pdf", tipo: "application/pdf" }] },
   ],
+  notificacoes: [
+    { id: "n-ex1", exemplo: true, data: m(0, 3) + "T18:05:00.000Z", titulo: "📥 1 documento(s) novo(s) em influenciadores@", texto: "   • Notas fiscais — Duda Martins — R$ 18.000,00", area: "influenciadores", modulo: "emails" },
+    { id: "n-ex2", exemplo: true, data: m(0, 2) + "T13:25:00.000Z", titulo: "📥 1 documento(s) novo(s) em financeiro@", texto: "   • Notas fiscais — Studio Lumen (produtora) — R$ 12.500,00", area: "financeiro", modulo: "emails" },
+  ],
   consumo: [
     { id: "ia-ex1", exemplo: true, data: m(0, 2) + "T13:21:00.000Z", api: "Anthropic (Claude)", operacao: "Classificar e-mail", ref: "NF 1234 — filme conceito", modelo: "claude-opus-5-5", entrada: 3850, saida: 310, cacheLeitura: 0, cacheEscrita: 0, custoUsd: 0.0216 },
     { id: "ia-ex2", exemplo: true, data: m(0, 3) + "T18:03:00.000Z", api: "Anthropic (Claude)", operacao: "Classificar e-mail", ref: "Nota fiscal campanha Natal", modelo: "claude-opus-5-5", entrada: 2900, saida: 280, cacheLeitura: 0, cacheEscrita: 0, custoUsd: 0.0172 },

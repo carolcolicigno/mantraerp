@@ -42,6 +42,7 @@ const WRITE = {
   influContratos: ["influenciadores"],
   emails: ["emails"], // só status/vínculos; os itens são criados pela automação
   consumo: [], // gravado só pelo servidor
+  notificacoes: [], // gravado só pelo servidor
   midias: ["financeiro"],
   orcamentos: ["financeiro"],
   usuarios: [], // só admin
@@ -89,7 +90,7 @@ async function seedNegocio(s) {
   const d = seed();
   for (const col of COLLECTIONS) if (col !== "usuarios" && col !== "config") {
     // E-mails e consumo reais são preservados; só os exemplos são recriados.
-    if (col === "emails" || col === "consumo") { for (const r of await s.all(col)) if (r.exemplo) await s.del(col, r.id); }
+    if (col === "emails" || col === "consumo" || col === "notificacoes") { for (const r of await s.all(col)) if (r.exemplo) await s.del(col, r.id); }
     else await s.delCol(col);
     for (const r of d[col] || []) await s.put(col, r.id, r);
   }
@@ -136,12 +137,17 @@ async function dadosPara(u) {
   // Caixa de e-mails: cada pessoa vê só as caixas da sua área; e-mails ignorados não vão para a tela.
   const veCaixa = (e) => hasModule(u, "emails") && hasModule(u, e.area === "influenciadores" ? "influenciadores" : "financeiro");
   out.emails = out.emails.filter((e) => e.status !== "ignorado" && veCaixa(e)).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 500);
+  out.notificacoes = notificacoesPara(u, out.notificacoes);
   out.consumo = isAdmin(u) || hasModule(u, "financeiro") ? out.consumo : [];
   const inbox = (await getRec("config", "inbox-status")) || {};
   out.integracoes = { asaas: asaas.configurado(), ambiente: asaas.ambiente(), emails: { ...automacao.status(), ultimaSync: inbox.ultimaSync || "", erros: inbox.erros || [] }, modeloIa: ia.MODELO, precoIa: ia.PRECO, alertas: alertas.canais(), drive: armazenamento.noDrive() };
   if (isAdmin(u)) out.integracoes.armazenamento = { resumo: await store.arqResumo(), backup: (await getRec("config", "backup-status")) || {} };
   return out;
 }
+
+// Cada pessoa vê as notificações das áreas a que tem acesso; as gerais vão para quem tem Aprovações.
+const notificacoesPara = (u, lista) => lista.filter((n) => isAdmin(u) || (n.area === "geral" ? hasModule(u, "aprovacoes") : hasModule(u, n.area)))
+  .sort((a, b) => b.data.localeCompare(a.data)).slice(0, 60);
 
 /* ---------- Validações ---------- */
 const digitos = (v) => String(v || "").replace(/\D/g, "");
@@ -328,7 +334,7 @@ async function webhookAsaas(req, res) {
 const alertasLigados = async () => !!((await getRec("config", "geral")) || {}).alertasAtivos;
 const ctxAutomacao = {
   store, log: (acao, detalhe) => log("Automação", acao, detalhe),
-  alerta: async (texto) => { if (await alertasLigados()) await alertas.enviar(texto); },
+  alerta: async (titulo, texto, area = "geral", modulo = "") => alertas.notificar(store, { titulo, texto, area, modulo, whatsappLigado: await alertasLigados() }),
 };
 let sincronizando = null;
 const rodarSync = () => (sincronizando ||= automacao.sincronizar(ctxAutomacao).finally(() => { sincronizando = null; }));
@@ -357,8 +363,9 @@ async function cronEmails(req, res) {
   if (st.google && st.ia) { const r = await rodarSync().catch((e) => ({ erros: [e.message], novos: [] })); out.novos = r.novos.length; out.erros = r.erros; }
   out.lembretes = await automacao.enviarLembretes(ctxAutomacao).catch((e) => ({ erro: e.message }));
   out.backup = await armazenamento.backupNoDrive(store).catch((e) => ({ ok: false, motivo: e.message }));
-  if (!out.backup.ok && out.backup.motivo !== "Drive não configurado") await ctxAutomacao.alerta(`⚠️ Backup diário do ERP falhou: ${out.backup.motivo}`);
-  if (await alertasLigados()) { const r = await alertas.resumoDiario(store); if (r) out.resumo = await alertas.enviar(r); }
+  if (!out.backup.ok && out.backup.motivo !== "Drive não configurado") await ctxAutomacao.alerta("⚠️ Backup diário falhou", out.backup.motivo, "geral", "aprovacoes");
+  const resumo = await alertas.resumoDiario(store);
+  if (resumo) out.resumo = (await ctxAutomacao.alerta("☀️ Resumo do dia", resumo.split("\n").slice(1).join("\n"), "financeiro", "financeiro")).erros;
   await store.put("config", "backup-status", { id: "backup-status", ultimo: out.backup.ok ? new Date().toISOString() : ((await getRec("config", "backup-status"))?.ultimo || ""), ...out.backup });
   return send(res, 200, out);
 }
@@ -374,7 +381,7 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
     for (const ch of changes) {
       const { op, col, id } = ch;
       if (!COLLECTIONS.includes(col) || typeof id !== "string" || !id || id.length > 64) throw new HttpError(400, "Registro inválido");
-      if (!canWrite(u, col) || col === "consumo") throw new HttpError(403, `Seu perfil não pode alterar ${col}`);
+      if (!canWrite(u, col) || col === "consumo" || col === "notificacoes") throw new HttpError(403, `Seu perfil não pode alterar ${col}`);
       const antes = await getRec(col, id, s);
       if (col === "config" && id !== "geral") throw new HttpError(403, "Configuração protegida");
       if (col === "emails" && (!antes || op === "delete")) throw new HttpError(400, "Itens da caixa de e-mails são criados pela automação");
@@ -531,6 +538,7 @@ async function api(req, res, url) {
   if (route === "POST /api/logout") { await store.delSess(cookies(req).sid); return send(res, 200, { ok: true }, { "Set-Cookie": sessionCookie("", 0) }); }
   if (route === "GET /api/me") return send(res, 200, { usuario: { ...u, modulosEfetivos: modulosDe(u), podeAprovar: canApprove(u) } });
   if (route === "GET /api/data") return send(res, 200, await dadosPara(u));
+  if (route === "GET /api/notificacoes") return send(res, 200, notificacoesPara(u, await listCol("notificacoes")));
   if (route === "POST /api/sync") {
     const { entrada, revs } = await aplicarLote(u, await readBody(req));
     return send(res, 200, { ok: true, historico: entrada, revs });
@@ -593,11 +601,10 @@ async function api(req, res, url) {
   }
   if (route === "POST /api/alertas/teste") {
     if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");
-    const c = alertas.canais();
-    if (!c.slack && !c.whatsapp) throw new HttpError(400, "Nenhum canal configurado (SLACK_WEBHOOK_URL ou WHATSAPP_*)");
-    const r = await alertas.enviar((await alertas.resumoDiario(store)) || "✅ Teste de alerta do Mantra ERP: tudo em dia por aqui.");
-    if (!r.enviado) throw new HttpError(502, r.erros.join(" · "));
-    return send(res, 200, { ok: true, erros: r.erros });
+    const texto = ((await alertas.resumoDiario(store)) || "Tudo em dia por aqui.").split("\n").filter((l) => !l.startsWith("*")).join("\n") || "Tudo em dia por aqui.";
+    const r = await alertas.notificar(store, { titulo: "🔔 Teste de notificação", texto, area: "geral", whatsappLigado: true });
+    if (r.erros.length) throw new HttpError(502, `Notificação criada no app, mas o WhatsApp falhou: ${r.erros.join(" · ")}`);
+    return send(res, 200, { ok: true, notificacao: r.notificacao, whatsapp: alertas.canais().whatsapp });
   }
   if (route === "POST /api/reset") {
     if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");

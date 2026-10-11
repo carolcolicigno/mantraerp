@@ -1454,6 +1454,57 @@ function renderPorCliente() {
     `<p class="empty">Receita de agência = fees e projetos faturados + comissão de mídia (a verba bruta de mídia é repassada e não conta). Custos de projetos vêm de Projetos e serviços (horas × custo/hora + terceiros); influenciadores, dos contratos do módulo Influenciadores.</p>`;
 }
 
+/* ----- Notificações (app e navegador) ----- */
+const chaveVistas = () => `mantra-notif-vistas-${me?.id}`;
+const lerVistas = () => { try { return localStorage.getItem(chaveVistas()) || ""; } catch { return ""; } };
+const gravarVistas = (v) => { try { localStorage.setItem(chaveVistas(), v); } catch { /* sem armazenamento local */ } };
+const notifNaoLidas = () => (db?.notificacoes || []).filter((n) => n.data > lerVistas()).length;
+let notifAvisadas = null; // notificações já mostradas no navegador nesta sessão
+function avisarNavegador(lista) {
+  if (notifAvisadas === null) { notifAvisadas = new Set(lista.map((n) => n.id)); return; }
+  const novas = lista.filter((n) => !notifAvisadas.has(n.id));
+  novas.forEach((n) => notifAvisadas.add(n.id));
+  if (!novas.length) return;
+  if ("Notification" in window && Notification.permission === "granted") {
+    for (const n of novas.slice(0, 3)) {
+      const aviso = new Notification(n.titulo, { body: n.texto.replace(/^\s*•\s*/gm, "• "), icon: "/logo.svg", tag: n.id });
+      aviso.onclick = () => { window.focus(); if (n.modulo && can(n.modulo)) { state2.mod = n.modulo; render(); } aviso.close(); };
+    }
+  } else toast(novas[0].titulo);
+}
+async function buscarNotificacoes() {
+  if (!db || !me) return;
+  try { db.notificacoes = await apiFetch("/api/notificacoes"); avisarNavegador(db.notificacoes); renderRail(); } catch { /* tenta de novo no próximo ciclo */ }
+}
+setInterval(() => { if (document.visibilityState === "visible" || "Notification" in window) buscarNotificacoes(); }, 120000);
+async function ativarNavegador() {
+  if (!("Notification" in window)) return toast("Este navegador não suporta notificações");
+  const p = await Notification.requestPermission();
+  toast(p === "granted" ? "Notificações do navegador ativadas" : "Permissão negada. Libere nas configurações do site, no cadeado da barra de endereço.");
+  if (p === "granted") new Notification("Mantra ERP", { body: "Pronto! Você vai ser avisado por aqui.", icon: "/logo.svg" });
+}
+function abrirNotificacoes() {
+  let dlg = document.getElementById("notifDialog");
+  if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "notifDialog"; dlg.className = "dialog"; document.body.appendChild(dlg); }
+  const vistas = lerVistas();
+  const lista = db.notificacoes || [];
+  const permissao = "Notification" in window ? Notification.permission : "indisponível";
+  dlg.innerHTML = `<h2>Notificações</h2>
+    ${permissao !== "granted" && permissao !== "indisponível" ? `<p class="empty">Receba os avisos também no navegador. <button class="btn-mini" data-ativar>Ativar no navegador</button></p>` : ""}
+    ${lista.length ? `<div class="notif-lista">${lista.map((n) => `<button class="notif ${n.data > vistas ? "is-nova" : ""}" data-mod="${escH(n.modulo || "")}">
+      <b>${escH(n.titulo)}</b><span class="crumbs">${new Date(n.data).toLocaleString("pt-BR")}</span>${n.texto ? `<span class="notif__texto">${escH(n.texto)}</span>` : ""}</button>`).join("")}</div>` : `<p class="empty">Nenhuma notificação por enquanto.</p>`}
+    <div class="dialog__actions"><button class="btn-ghost" data-close>Fechar</button></div>`;
+  dlg.onclick = (e) => {
+    if (e.target.closest("[data-ativar]")) return ativarNavegador().then(() => abrirNotificacoes());
+    if (e.target.closest("[data-close]")) return dlg.close();
+    const n = e.target.closest(".notif");
+    if (n?.dataset.mod && can(n.dataset.mod)) { state2.mod = n.dataset.mod; dlg.close(); render(); }
+  };
+  dlg.onclose = () => renderRail();
+  if (lista[0]) gravarVistas(lista[0].data);
+  dlg.showModal();
+}
+
 /* ----- Custos das APIs (tokens) ----- */
 function renderArmazenamento() {
   const a = db.integracoes?.armazenamento;
@@ -1537,7 +1588,7 @@ function renderConfig() {
       <label>Alíquota de ISS (%)<input id="cfgIss" type="number" step="0.01" min="0" max="10" value="${c.iss ?? 5}" /></label>
       <label>Cotação do dólar (custos de APIs)<input id="cfgDolar" type="number" step="0.01" min="1" max="20" value="${c.cotacaoDolar ?? 5.5}" /></label>
       <label>Limite mensal de gasto com IA (US$, 0 = sem limite)<input id="cfgLimiteIa" type="number" step="1" min="0" value="${c.limiteIaUsd ?? 0}" /></label>
-      <label class="check"><input id="cfgAlertas" type="checkbox" ${c.alertasAtivos ? "checked" : ""} /> Enviar alertas no Slack/WhatsApp (documentos novos, resumo diário de vencimentos e aprovações, limite de IA)</label>
+      <label class="check"><input id="cfgAlertas" type="checkbox" ${c.alertasAtivos ? "checked" : ""} /> Enviar também no WhatsApp (documentos novos, resumo diário de vencimentos e aprovações, limite de IA)</label>
       <label class="check"><input id="cfgLembretes" type="checkbox" ${c.lembretesAtivos ? "checked" : ""} /> Enviar lembretes de cobrança por e-mail aos clientes (3 dias antes e 1 dia após o vencimento)</label>
     </div>
     <p class="empty">Alíquotas sugeridas: Simples Nacional 11,33% (Anexo III, faixa inicial), Lucro Presumido 16,33% (PIS, COFINS, IRPJ, CSLL e ISS 5%), Lucro Real ~21,25%. Confirme com a contabilidade.</p>
@@ -1558,13 +1609,13 @@ function renderConfig() {
       <li>Na Vercel, crie as variáveis <code>GOOGLE_SERVICE_ACCOUNT</code> (conteúdo do JSON), <code>DRIVE_PASTA_RAIZ</code> (ID da pasta), <code>ANTHROPIC_API_KEY</code> e <code>CRON_SECRET</code> (uma senha qualquer), e faça um novo deploy.</li>
     </ol></div>
   ${renderArmazenamento()}
-  <div class="panel"><div class="panel__head"><h3 class="panel__title">Alertas no Slack e WhatsApp</h3>${(() => { const a = db.integracoes?.alertas || {}; return a.slack || a.whatsapp ? pill([a.slack && "Slack", a.whatsapp && "WhatsApp"].filter(Boolean).join(" + ")).replace("pill--", "pill--green ") : pill("não configurado"); })()}</div>
+  <div class="panel"><div class="panel__head"><h3 class="panel__title">Notificações no app, navegador e WhatsApp</h3>${db.integracoes?.alertas?.whatsapp ? pill("WhatsApp conectado").replace("pill--", "pill--green ") : pill("WhatsApp não configurado")}</div>
     <ol class="steps">
-      <li><b>Slack:</b> em <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a>, crie um app → <b>Incoming Webhooks</b> → escolha o canal (ex.: #financeiro) e copie a URL para a variável <code>SLACK_WEBHOOK_URL</code> na Vercel.</li>
-      <li><b>WhatsApp:</b> na <a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business</a>, ative a API do WhatsApp Cloud e crie <code>WHATSAPP_TOKEN</code>, <code>WHATSAPP_PHONE_ID</code> e <code>WHATSAPP_PARA</code> (números com DDI, separados por vírgula). Para mensagens fora da janela de 24 h, aprove um modelo com uma variável e informe o nome em <code>WHATSAPP_TEMPLATE</code>.</li>
-      <li>Marque "Enviar alertas" acima e salve. O resumo diário sai junto com a rotina das 8h.</li>
+      <li><b>No app:</b> o sino no menu lateral mostra documentos novos, o resumo diário, o limite de IA e falhas de backup. Funciona sem configurar nada.</li>
+      <li><b>No navegador:</b> clique em "Ativar no navegador" (no sino ou abaixo) para receber o aviso do sistema mesmo com a aba do ERP em segundo plano.</li>
+      <li><b>WhatsApp (opcional):</b> na <a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business</a>, ative a API do WhatsApp Cloud e crie na Vercel <code>WHATSAPP_TOKEN</code>, <code>WHATSAPP_PHONE_ID</code> e <code>WHATSAPP_PARA</code> (números com DDI, separados por vírgula). Para mensagens fora da janela de 24 h, aprove um modelo com uma variável e informe o nome em <code>WHATSAPP_TEMPLATE</code>. Depois marque "Enviar também no WhatsApp" acima.</li>
     </ol>
-    <div class="dialog__actions" style="justify-content:flex-start"><button class="btn-ghost" data-act="${reg(async () => { try { await apiFetch("/api/alertas/teste", {}); toast("Alerta de teste enviado"); } catch (e) { toast(e.message); } })}">Enviar alerta de teste</button></div></div>`;
+    <div class="dialog__actions" style="justify-content:flex-start"><button class="btn-ghost" data-act="${reg(ativarNavegador)}">Ativar no navegador</button><button class="btn-ghost" data-act="${reg(async () => { try { const r = await apiFetch("/api/alertas/teste", {}); await buscarNotificacoes(); toast(r.whatsapp ? "Teste enviado no app e no WhatsApp" : "Teste enviado no app"); } catch (e) { toast(e.message); } })}">Enviar notificação de teste</button></div></div>`;
 }
 
 const SUBTITULOS = {
@@ -1592,7 +1643,9 @@ function renderRail() {
     `<button class="rail__btn ${state2.mod === k ? "is-active" : ""}" data-mod="${k}" title="${m.label}" aria-label="${m.label}"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${k === "emails" && emailsNovos() ? `<span class="rail__badge">${emailsNovos()}</span>` : ""}</button>`).join("");
   const u = currentUser();
   const ini = u.nome.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
-  document.getElementById("userMenu").innerHTML = `<span class="user-avatar" title="${escH(u.nome)} · ${PERFIS[u.perfil].label}">${escH(ini)}</span>
+  const naoLidas = notifNaoLidas();
+  document.getElementById("userMenu").innerHTML = `<button class="rail__btn" id="btnNotif" title="Notificações" aria-label="Notificações"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>${naoLidas ? `<span class="rail__badge">${naoLidas > 9 ? "9+" : naoLidas}</span>` : ""}</button>
+    <span class="user-avatar" title="${escH(u.nome)} · ${PERFIS[u.perfil].label}">${escH(ini)}</span>
     <button class="rail__btn" id="btnSenha" title="Trocar senha" aria-label="Trocar senha"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3"/></svg></button>
     <button class="rail__btn" id="btnSair" title="Sair" aria-label="Sair"><svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/></svg></button>`;
 }
@@ -1647,6 +1700,7 @@ document.getElementById("userMenu").addEventListener("click", async (e) => {
     await apiFetch("/api/logout", {}).catch(() => {});
     location.reload();
   }
+  if (e.target.closest("#btnNotif")) return abrirNotificacoes();
   if (e.target.closest("#btnSenha")) { document.getElementById("senhaForm").reset(); document.getElementById("senhaDialog").showModal(); }
 });
 document.getElementById("senhaCancel").addEventListener("click", () => document.getElementById("senhaDialog").close());
@@ -1663,6 +1717,7 @@ const loginEl = document.getElementById("login");
 function showLogin() { me = null; db = null; loginEl.hidden = false; appEl.hidden = true; document.getElementById("loginEmail").focus(); }
 async function entrar() {
   await loadData(); loginEl.hidden = true; appEl.hidden = false; renderView();
+  avisarNavegador(db.notificacoes || []);
   // Lê os e-mails novos em segundo plano (o servidor limita a uma leitura a cada 10 minutos).
   if (can("emails") && db.integracoes?.emails?.google && db.integracoes?.emails?.ia)
     apiAction("/api/emails/sincronizar", { auto: true }).then((r) => { if (r.novos) toast(`${r.novos} documento(s) novo(s) chegaram por e-mail`); }).catch(() => {});
