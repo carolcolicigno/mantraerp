@@ -22,6 +22,7 @@ module.exports = () => ({
     { id: "f3", nome: "Adobe", cnpj: "02.343.442/0001-66", contato: "br@adobe.com", categoria: "Software" },
   ],
   contas: [
+    { id: "md2r", tipo: "receber", descricao: "Mídia Meta Ads — Vivo 5G verão", parceiro: "Vivo", categoria: "Mídia", valor: 80000, vencimento: m(-1, 15), status: "pago", conciliado: true, aprovado: true },
     { id: "a1", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-2), status: "pago", conciliado: true, aprovado: true },
     { id: "a2", tipo: "receber", descricao: "Fee mensal Natura", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(-1), status: "pago", conciliado: true, aprovado: true },
     { id: `rec-k1-${m(0, 5).slice(0, 7)}`, contrato: "k1", tipo: "receber", descricao: "Parcela contrato — Fee de conta — branding e social", parceiro: "Natura", categoria: "Fee", valor: 45000, vencimento: m(0, 5), status: "aberto", conciliado: false, aprovado: true },
@@ -75,6 +76,17 @@ module.exports = () => ({
     { id: "f4", cliente: "Nubank", proposta: "Lançamento cartão Ultravioleta", tipo: "WhatsApp", data: m(-1, 28), responsavel: "Bia Santos", descricao: "Confirmar aprovação do pedido", concluida: true },
   ],
   extrato: [],
+  midias: [
+    { id: "md1", cliente: "Natura", veiculo: "Meta Ads", campanha: "Natal Natura — Instagram e Facebook", competencia: m(0, 1), valorBruto: 120000, comissao: 20, bv: 0, vencimentoCliente: m(0, 15), vencimentoVeiculo: m(0, 25), status: "veiculado" },
+    { id: "md2", cliente: "Vivo", veiculo: "Meta Ads", campanha: "Vivo 5G verão", competencia: m(-1, 1), valorBruto: 80000, comissao: 15, bv: 5, vencimentoCliente: m(-1, 15), vencimentoVeiculo: m(0, 5), status: "faturado", contaReceberId: "md2r" },
+  ],
+  orcamentos: [
+    { id: "o1", ano: Number(TODAY.slice(0, 4)), tipo: "receita", categoria: "Fee", mensal: 110000 },
+    { id: "o2", ano: Number(TODAY.slice(0, 4)), tipo: "receita", categoria: "Projeto", mensal: 40000 },
+    { id: "o3", ano: Number(TODAY.slice(0, 4)), tipo: "despesa", categoria: "Produção", mensal: 30000 },
+    { id: "o4", ano: Number(TODAY.slice(0, 4)), tipo: "despesa", categoria: "Software", mensal: 4500 },
+    { id: "o5", ano: Number(TODAY.slice(0, 4)), tipo: "despesa", categoria: "Estrutura", mensal: 15000 },
+  ],
   influenciadores: [
     { id: "i1", nome: "Duda Martins", arroba: "@dudamartins", rede: "Instagram", seguidores: 820000, nicho: "Beleza", email: "contato@dudamartins.com", cpfCnpj: "45.723.174/0001-10", pix: "contato@dudamartins.com", agencia: "Squad Talentos" },
     { id: "i2", nome: "Gui Ferraz", arroba: "@guiferraz", rede: "TikTok", seguidores: 1350000, nicho: "Humor", email: "gui@ferraz.art", pix: "gui@ferraz.art" },

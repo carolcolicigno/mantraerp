@@ -40,11 +40,16 @@ function queries(exec, dialect) {
     purgeSess: (now) => exec("DELETE FROM sessoes WHERE expira < ?", [now]),
     log: async (quando, usuario, acao, detalhe) => Number((await exec("INSERT INTO historico (quando, usuario, acao, detalhe) VALUES (?, ?, ?, ?) RETURNING id", [quando, usuario, acao, detalhe]))[0].id),
     // Arquivos (conteúdo em base64; metadados listados sem o conteúdo).
-    arqPut: (a) => exec("INSERT INTO arquivos (id, col, dono, categoria, nome, tipo, tamanho, dados, criado_por, criado_em, tipo_doc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [a.id, a.col, a.dono, a.categoria, a.nome, a.tipo, a.tamanho, a.dados, a.criado_por, a.criado_em, a.tipo_doc || "Outros"]),
+    arqPut: (a) => exec("INSERT INTO arquivos (id, col, dono, categoria, nome, tipo, tamanho, dados, criado_por, criado_em, tipo_doc, drive_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [a.id, a.col, a.dono, a.categoria, a.nome, a.tipo, a.tamanho, a.dados, a.criado_por, a.criado_em, a.tipo_doc || "Outros", a.drive_id || null]),
+    // Documentos ainda guardados no banco (candidatos a ir para o Drive).
+    arqNoBanco: async (limite) => (await exec("SELECT id FROM arquivos WHERE categoria = 'documento' AND drive_id IS NULL ORDER BY criado_em LIMIT ?", [limite])).map((r) => r.id),
+    arqMoverDrive: (id, driveId) => exec("UPDATE arquivos SET drive_id = ?, dados = '' WHERE id = ?", [driveId, id]),
+    arqResumo: async () => (await exec("SELECT CASE WHEN drive_id IS NULL THEN 'banco' ELSE 'drive' END AS onde, COUNT(*) AS n, COALESCE(SUM(tamanho), 0) AS bytes FROM arquivos GROUP BY CASE WHEN drive_id IS NULL THEN 'banco' ELSE 'drive' END", [])).map((r) => ({ onde: r.onde, n: Number(r.n), bytes: Number(r.bytes) })),
+    dump: async () => (await exec("SELECT col, id, data FROM records", [])).map((r) => ({ col: r.col, id: r.id, data: JSON.parse(r.data) })),
     arqList: async (col, dono) => (await exec("SELECT id, col, dono, categoria, nome, tipo, tamanho, criado_por, criado_em, tipo_doc FROM arquivos WHERE col = ? AND dono = ? ORDER BY criado_em DESC", [col, dono])).map((a) => ({ ...a, tamanho: Number(a.tamanho) })),
     arqCount: async (col) => (await exec("SELECT dono, COUNT(*) AS n FROM arquivos WHERE col = ? AND categoria = 'documento' GROUP BY dono", [col])).reduce((o, r) => ((o[r.dono] = Number(r.n)), o), {}),
     arqGet: async (id) => (await exec("SELECT * FROM arquivos WHERE id = ?", [id]))[0] || null,
-    arqMeta: async (id) => (await exec("SELECT id, col, dono, categoria, nome, tipo, tamanho FROM arquivos WHERE id = ?", [id]))[0] || null,
+    arqMeta: async (id) => (await exec("SELECT id, col, dono, categoria, nome, tipo, tamanho, drive_id FROM arquivos WHERE id = ?", [id]))[0] || null,
     arqDel: (id) => exec("DELETE FROM arquivos WHERE id = ?", [id]),
     arqDelDono: (col, dono) => exec("DELETE FROM arquivos WHERE col = ? AND dono = ?", [col, dono]),
     hist: async () => (await exec("SELECT id, quando, usuario, acao, detalhe FROM historico ORDER BY id DESC LIMIT 500", [])).map((h) => ({ ...h, id: Number(h.id) })),
@@ -57,6 +62,7 @@ function sqliteStore(file) {
   const db = new DatabaseSync(file);
   db.exec("PRAGMA journal_mode = WAL;" + SCHEMA.sqlite);
   try { db.exec("ALTER TABLE arquivos ADD COLUMN tipo_doc TEXT"); } catch { /* coluna já existe */ }
+  try { db.exec("ALTER TABLE arquivos ADD COLUMN drive_id TEXT"); } catch { /* coluna já existe */ }
   const exec = async (sql, params) => {
     const st = db.prepare(sql);
     return /^\s*(SELECT|INSERT[\s\S]*RETURNING)/i.test(sql) ? st.all(...params) : (st.run(...params), []);
@@ -83,7 +89,7 @@ function pgStore(url) {
   const pool = new Pool({ connectionString: url, max: 3, ssl: local ? false : { rejectUnauthorized: process.env.PG_SSL_NO_VERIFY !== "1" } });
   const toPg = (sql) => { let i = 0; return sql.replace(/\?/g, () => `$${++i}`); };
   const execOn = (client) => async (sql, params) => (await client.query(toPg(sql), params)).rows;
-  const ready = pool.query(SCHEMA.pg).then(() => pool.query("ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS tipo_doc TEXT"));
+  const ready = pool.query(SCHEMA.pg).then(() => pool.query("ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS tipo_doc TEXT")).then(() => pool.query("ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS drive_id TEXT"));
   const exec = async (sql, params) => { await ready; return execOn(pool)(sql, params); };
   return {
     dialect: "pg",

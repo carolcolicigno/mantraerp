@@ -13,7 +13,7 @@ const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const escH = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 /* ---------- Comunicação com o servidor ---------- */
-const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas", "extrato", "atividades", "concorrencias", "influenciadores", "influContratos", "emails"];
+const SYNC_COLS = ["contas", "notas", "compras", "fornecedores", "clientes", "propostas", "contratos", "projetos", "colaboradores", "usuarios", "config", "tarefas", "extrato", "atividades", "concorrencias", "influenciadores", "influContratos", "emails", "midias", "orcamentos"];
 let db = null;
 let me = null;
 let synced = {};
@@ -107,7 +107,7 @@ const SCHEMAS = {
     { k: "tipo", label: "Tipo", type: "select", options: ["receber", "pagar"] },
     { k: "descricao", label: "Descrição" },
     { k: "parceiro", label: "Cliente / Fornecedor" },
-    { k: "categoria", label: "Categoria", type: "select", options: ["Fee", "Projeto", "Produção", "Mídia", "Software", "Estrutura", "Pessoal", "Impostos", "Concorrência", "Influenciadores", "Outros"] },
+    { k: "categoria", label: "Categoria", type: "select", options: ["Fee", "Projeto", "Produção", "Mídia", "Software", "Estrutura", "Pessoal", "Impostos", "Concorrência", "Influenciadores", "Repasse de mídia", "BV", "Outros"] },
     { k: "valor", label: "Valor", type: "money" },
     { k: "vencimento", label: "Vencimento", type: "date" },
     { k: "status", label: "Status", type: "select", options: ["aberto", "pago"] },
@@ -298,6 +298,25 @@ const SCHEMAS = {
     { k: "vencimentoPagamento", label: "Vencimento do pagamento", type: "date", optional: true },
     { k: "nfRecebida", label: "NF recebida", type: "bool" },
     { k: "links", label: "Links (contrato, posts publicados) — Nome | https://link", type: "textarea", optional: true, full: true },
+  ] },
+  midias: { singular: "Veiculação de mídia", wide: true, fields: [
+    { k: "cliente", label: "Cliente", type: "select", options: opts("clientes") },
+    { k: "veiculo", label: "Veículo / plataforma (fornecedor)", type: "select", options: opts("fornecedores") },
+    { k: "campanha", label: "Campanha / PI", full: true },
+    { k: "competencia", label: "Mês de veiculação", type: "date" },
+    { k: "valorBruto", label: "Valor bruto da mídia", type: "money" },
+    { k: "comissao", label: "Comissão da agência (%)", type: "number" },
+    { k: "bv", label: "BV do veículo (%)", type: "number" },
+    { k: "vencimentoCliente", label: "Vencimento para o cliente", type: "date" },
+    { k: "vencimentoVeiculo", label: "Vencimento do repasse ao veículo", type: "date" },
+    { k: "status", label: "Status", type: "select", options: ["planejado", "veiculado", "faturado", "repassado", "cancelado"] },
+  ] },
+  orcamentos: { singular: "Linha de orçamento", fields: [
+    { k: "ano", label: "Ano", type: "number" },
+    { k: "tipo", label: "Tipo", type: "select", options: ["receita", "despesa"] },
+    { k: "categoria", label: "Categoria", type: "select", options: () => SCHEMAS.contas.fields[3].options },
+    { k: "mensal", label: "Valor orçado por mês", type: "money" },
+    { k: "observacao", label: "Observação", optional: true, full: true },
   ] },
   concorrencias: { singular: "Concorrência", wide: true, fields: [
     { section: "Concorrência" },
@@ -762,6 +781,7 @@ const MODULES = {
     "Contas a pagar": () => contasTable("pagar"),
     "Fluxo de caixa": renderFluxo,
     "Conciliação bancária": renderConciliacao,
+    "Mídia e repasses": renderMidias,
   } },
   faturamento: { label: "Faturamento e fiscal", render: renderFaturamento },
   compras: { label: "Compras e fornecedores", tabs: {
@@ -788,7 +808,7 @@ const MODULES = {
   contratos: { label: "Contratos", render: renderContratos },
   servicos: { label: "Projetos e serviços", render: renderServicos },
   pessoas: { label: "Pessoas", render: renderPessoas },
-  relatorios: { label: "Relatórios gerenciais", render: renderRelatorios },
+  relatorios: { label: "Relatórios gerenciais", tabs: { "Visão geral": renderRelatorios, DRE: renderDRE, "Orçado × realizado": renderOrcado, "Rentabilidade por cliente": renderPorCliente } },
   emails: { label: "Caixa de e-mails", render: renderEmails },
   influenciadores: { label: "Influenciadores", tabs: { "Contratos e pagamentos": renderInfluContratos, Influenciadores: renderInfluenciadores } },
   usuarios: { label: "Usuários e acessos", tabs: { Usuários: renderUsuarios, "Permissões por perfil": renderMatriz } },
@@ -1300,9 +1320,163 @@ function renderInfluenciadores() {
     actions: (r) => [docsAction("influenciadores")(r), ...editDel("influenciadores")(r)] });
 }
 
+/* ----- Mídia e repasses ----- */
+const midiaCalc = (m) => { const bruto = Number(m.valorBruto) || 0, com = bruto * (Number(m.comissao) || 0) / 100; return { bruto, com, repasse: bruto - com, bv: bruto * (Number(m.bv) || 0) / 100 }; };
+const contaDe = (id) => id && db.contas.find((c) => c.id === id);
+function lancarMidia(m, tipo) {
+  const v = midiaCalc(m);
+  const base = { id: uid(), status: "aberto", conciliado: false };
+  let conta;
+  if (tipo === "cliente") { conta = { ...base, tipo: "receber", descricao: `Mídia ${m.veiculo} — ${m.campanha}`, parceiro: m.cliente, categoria: "Mídia", valor: v.bruto, vencimento: m.vencimentoCliente || addDays(TODAY, 15), aprovado: true }; m.contaReceberId = conta.id; if (["planejado", "veiculado"].includes(m.status)) m.status = "faturado"; }
+  if (tipo === "repasse") { conta = { ...base, tipo: "pagar", descricao: `Repasse de mídia ${m.veiculo} — ${m.campanha} (${m.cliente})`, parceiro: m.veiculo, categoria: "Repasse de mídia", valor: v.repasse, vencimento: m.vencimentoVeiculo || addDays(TODAY, 30), aprovado: canApprove() || v.repasse < 5000 }; m.contaPagarId = conta.id; }
+  if (tipo === "bv") { conta = { ...base, tipo: "receber", descricao: `BV ${m.veiculo} — ${m.campanha}`, parceiro: m.veiculo, categoria: "BV", valor: v.bv, vencimento: addDays(m.vencimentoVeiculo || TODAY, 30), aprovado: true }; m.contaBvId = conta.id; }
+  db.contas.push(conta);
+  log("Mídia lançada no financeiro", `${conta.descricao} — ${BRL(conta.valor)}`); toast(conta.aprovado ? "Lançado no financeiro" : "Lançado — aguardando aprovação"); render();
+}
+function renderMidias() {
+  const rows = [...db.midias].filter((m) => m.status !== "cancelado").sort((a, b) => String(b.competencia).localeCompare(String(a.competencia)));
+  const doMes = rows.filter((m) => monthKey(m.competencia || "") === monthKey(TODAY));
+  // Risco de caixa: cliente já pagou a mídia, mas o repasse ao veículo ainda não saiu.
+  const repassar = rows.filter((m) => contaDe(m.contaReceberId)?.status === "pago" && contaDe(m.contaPagarId)?.status !== "pago");
+  const bvAberto = rows.filter((m) => contaDe(m.contaBvId) && contaDe(m.contaBvId).status !== "pago");
+  return `<div class="kpis">
+    ${kpi("Verba de mídia no mês", BRL(sum(doMes, (m) => midiaCalc(m).bruto)), `${doMes.length} veiculações`)}
+    ${kpi("Comissão da agência no mês", BRL(sum(doMes, (m) => midiaCalc(m).com)), "receita própria da Mantra", "pos")}
+    ${kpi("Repasses a fazer", BRL(sum(repassar, (m) => midiaCalc(m).repasse)), `${repassar.length} com cliente já pago — dinheiro de terceiros em caixa`, repassar.length ? "neg" : "")}
+    ${kpi("BV a receber", BRL(sum(bvAberto, (m) => midiaCalc(m).bv)), `${bvAberto.length} lançamentos`)}
+  </div>
+  <p class="empty" style="margin:0 0 12px">A verba do cliente passa pela Mantra, mas não é receita: o que fica é a comissão (e o BV). O faturamento ao cliente entra em Contas a receber e o repasse ao veículo em Contas a pagar, na categoria "Repasse de mídia"; a DRE desconta os repasses da receita bruta.</p>` +
+  table({ title: "Veiculações e repasses", rows, addCol: "midias", addDefaults: { competencia: TODAY, comissao: 20, bv: 0, status: "planejado", valorBruto: 0 },
+    cols: [{ label: "Mês", get: (r) => (r.competencia ? monthLabel(monthKey(r.competencia)) : "—") }, { label: "Cliente / campanha", get: (r) => `<b>${escH(r.cliente)}</b><div class="crumbs">${escH(r.campanha)}</div>` }, { label: "Veículo", get: txt("veiculo") },
+      { label: "Bruto", num: true, get: (r) => BRL(midiaCalc(r).bruto) }, { label: "Comissão", num: true, get: (r) => `${BRL(midiaCalc(r).com)}<div class="crumbs">${Number(r.comissao) || 0}%</div>` },
+      { label: "Repasse", num: true, get: (r) => BRL(midiaCalc(r).repasse) }, { label: "BV", num: true, get: (r) => (midiaCalc(r).bv ? BRL(midiaCalc(r).bv) : "—") },
+      { label: "Cliente", get: (r) => (contaDe(r.contaReceberId) ? pill(contaStatus(contaDe(r.contaReceberId))) : "—") }, { label: "Veículo", get: (r) => (contaDe(r.contaPagarId) ? pill(contaStatus(contaDe(r.contaPagarId))) : "—") }, { label: "Status", get: (r) => pill(r.status) }],
+    actions: (r) => [
+      !r.contaReceberId && { label: "Faturar cliente", cls: "main", fn: () => lancarMidia(r, "cliente") },
+      !r.contaPagarId && { label: "Lançar repasse", fn: () => lancarMidia(r, "repasse") },
+      !r.contaBvId && midiaCalc(r).bv > 0 && { label: "Lançar BV", fn: () => lancarMidia(r, "bv") },
+      contaDe(r.contaPagarId)?.status === "pago" && r.status !== "repassado" && { label: "Concluir", cls: "ok", fn: () => { r.status = "repassado"; render(); } },
+      ...editDel("midias")(r)] });
+}
+
+/* ----- DRE, orçado × realizado e rentabilidade ----- */
+const CAT_CUSTO_DIRETO = ["Produção", "Mídia", "Influenciadores", "Concorrência"];
+const CAT_DESP_OPER = ["Software", "Estrutura", "Outros"];
+let anoRel = Number(TODAY.slice(0, 4));
+const selAno = () => { const anos = [...new Set([anoRel, Number(TODAY.slice(0, 4)), ...db.contas.map((c) => Number(String(c.vencimento).slice(0, 4)))].filter(Boolean))].sort(); return `<select class="filter-input" data-anorel>${anos.map((a) => `<option ${a === anoRel ? "selected" : ""}>${a}</option>`).join("")}</select>`; };
+const folhaVisivel = () => db.colaboradores.some((e) => "salario" in e);
+// Linhas da DRE de um mês (regime de competência pelo vencimento).
+function dreMes(key) {
+  const doMes = db.contas.filter((c) => monthKey(c.vencimento || "") === key);
+  const rec = (cat) => sum(doMes.filter((c) => c.tipo === "receber" && (!cat || cat(c.categoria))), (c) => c.valor);
+  const desp = (cats) => sum(doMes.filter((c) => c.tipo === "pagar" && cats.includes(c.categoria)), (c) => c.valor);
+  const bruta = rec();
+  const repasses = desp(["Repasse de mídia"]);
+  const impostosPagos = desp(["Impostos"]);
+  const impostos = impostosPagos || (bruta - repasses) * (Number(cfg().aliquota) || 0) / 100;
+  const liquida = bruta - repasses - impostos;
+  const diretos = desp(CAT_CUSTO_DIRETO);
+  const margem = liquida - diretos;
+  const pessoalLanc = desp(["Pessoal"]);
+  // Folha estimada só em meses com movimento (evita "prejuízo" em meses sem nenhum lançamento).
+  const pessoal = pessoalLanc || (folhaVisivel() && key <= monthKey(TODAY) && doMes.length ? folhaMensal() : 0);
+  const oper = desp(CAT_DESP_OPER);
+  return { bruta, repasses, impostos, impEst: !impostosPagos && bruta > 0, liquida, diretos, margem, pessoal, pesEst: !pessoalLanc && pessoal > 0, oper, resultado: margem - pessoal - oper };
+}
+function renderDRE() {
+  const meses = Array.from({ length: 12 }, (_, i) => `${anoRel}-${String(i + 1).padStart(2, "0")}`);
+  const d = meses.map(dreMes);
+  const tot = Object.fromEntries(Object.keys(d[0]).map((k) => [k, sum(d, (x) => x[k])]));
+  const linhas = [
+    ["Receita bruta", "bruta"], ["(−) Repasses de mídia", "repasses", -1], ["(−) Impostos sobre faturamento", "impostos", -1, "impEst"], ["= Receita líquida", "liquida", 0, null, true],
+    ["(−) Custos diretos (produção, mídia própria, influenciadores, concorrências)", "diretos", -1], ["= Margem de contribuição", "margem", 0, null, true],
+    ["(−) Pessoal", "pessoal", -1, "pesEst"], ["(−) Despesas operacionais (software, estrutura, outros)", "oper", -1], ["= Resultado operacional", "resultado", 0, null, true],
+  ];
+  const cel = (v, sinal, est) => `<td class="num ${sinal ? "" : v >= 0 ? "pos" : "neg"}">${v ? (sinal || v < 0 ? "−" : "") + BRL(Math.abs(v)).replace("R$", "").trim() : "—"}${est ? "<sup>*</sup>" : ""}</td>`;
+  const mgem = tot.bruta - tot.repasses ? tot.resultado / (tot.bruta - tot.repasses) : 0;
+  return `<div class="kpis">
+    ${kpi(`Receita líquida ${anoRel}`, BRL(tot.liquida), `bruta ${BRL(tot.bruta)}`)}
+    ${kpi("Margem de contribuição", BRL(tot.margem), tot.liquida ? `${Math.round((tot.margem / tot.liquida) * 100)}% da receita líquida` : "", tot.margem >= 0 ? "pos" : "neg")}
+    ${kpi("Resultado operacional", BRL(tot.resultado), `margem ${Math.round(mgem * 100)}% sobre a receita de agência`, tot.resultado >= 0 ? "pos" : "neg")}
+  </div>
+  <div class="panel"><div class="panel__head"><h3 class="panel__title">DRE gerencial ${anoRel}</h3><div style="display:flex;gap:8px">${selAno()}
+    <button class="btn-ghost" data-act="${reg(() => exportarCSV(`dre-${anoRel}.csv`, ["Linha", ...meses, "Total"], linhas.map(([l, k, sg]) => [l, ...d.map((x) => (sg ? -x[k] : x[k]).toFixed(2)), (sg ? -tot[k] : tot[k]).toFixed(2)])))}">Exportar CSV</button></div></div>
+    <table class="table table--dre"><thead><tr><th>R$</th>${meses.map((m) => `<th class="num">${monthLabel(m)}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
+      ${linhas.map(([l, k, sg, est, forte]) => `<tr class="${forte ? "dre-total" : ""}"><td>${l}</td>${d.map((x) => cel(x[k], sg, est && x[est])).join("")}${cel(tot[k], sg)}</tr>`).join("")}
+    </tbody></table>
+    <p class="empty">Regime de competência pelo vencimento dos lançamentos. <sup>*</sup> Estimado: impostos pela alíquota de Configurações quando não há lançamento na categoria "Impostos"; pessoal pelo custo da folha quando não há lançamento na categoria "Pessoal".</p></div>`;
+}
+function realizadoCat(tipo, cat, keys) { return sum(db.contas.filter((c) => c.tipo === (tipo === "receita" ? "receber" : "pagar") && c.categoria === cat && keys.includes(monthKey(c.vencimento || ""))), (c) => c.valor); }
+let mesOrc = monthKey(TODAY);
+function renderOrcado() {
+  const ano = Number(mesOrc.slice(0, 4));
+  const linhas = db.orcamentos.filter((o) => Number(o.ano) === ano);
+  const ateMes = Array.from({ length: Number(mesOrc.slice(5)) }, (_, i) => `${ano}-${String(i + 1).padStart(2, "0")}`);
+  const rows = linhas.map((o) => { const orcM = Number(o.mensal) || 0, realM = realizadoCat(o.tipo, o.categoria, [mesOrc]), orcA = orcM * ateMes.length, realA = realizadoCat(o.tipo, o.categoria, ateMes); return { ...o, orcM, realM, orcA, realA }; });
+  const desvio = (r, o, real) => { const dif = real - o; const bom = r.tipo === "receita" ? dif >= 0 : dif <= 0; return `<span class="${bom ? "pos" : "neg"}">${dif >= 0 ? "+" : "−"}${BRL(Math.abs(dif))}${o ? ` (${Math.round((real / o) * 100)}%)` : ""}</span>`; };
+  const totR = rows.filter((r) => r.tipo === "receita"), totD = rows.filter((r) => r.tipo === "despesa");
+  return `<div class="kpis">
+    ${kpi("Receita orçada até o mês", BRL(sum(totR, (r) => r.orcA)), `realizado ${BRL(sum(totR, (r) => r.realA))}`)}
+    ${kpi("Despesa orçada até o mês", BRL(sum(totD, (r) => r.orcA)), `realizado ${BRL(sum(totD, (r) => r.realA))}`)}
+    ${kpi("Resultado orçado × realizado", BRL(sum(totR, (r) => r.realA) - sum(totD, (r) => r.realA)), `orçado ${BRL(sum(totR, (r) => r.orcA) - sum(totD, (r) => r.orcA))}`)}
+  </div>` + table({ title: `Orçado × realizado — ${monthLabel(mesOrc)}`, rows, addCol: "orcamentos", addDefaults: { ano, tipo: "despesa", categoria: "Software", mensal: 0 },
+    extra: `<input type="month" class="filter-input" data-mesorc value="${mesOrc}" />`,
+    cols: [{ label: "Tipo", get: (r) => pill(r.tipo) }, { label: "Categoria", get: txt("categoria") },
+      { label: "Orçado no mês", num: true, get: money("orcM") }, { label: "Realizado no mês", num: true, get: money("realM") }, { label: "Desvio no mês", num: true, get: (r) => desvio(r, r.orcM, r.realM) },
+      { label: "Orçado no ano", num: true, get: money("orcA") }, { label: "Realizado no ano", num: true, get: money("realA") }, { label: "Desvio no ano", num: true, get: (r) => desvio(r, r.orcA, r.realA) }],
+    actions: (r) => editDel("orcamentos")(db.orcamentos.find((o) => o.id === r.id)) });
+}
+function renderPorCliente() {
+  const ano = String(anoRel);
+  const noAno = (d) => String(d || "").startsWith(ano);
+  const rows = db.clientes.map((c) => {
+    const rec = sum(receber().filter((x) => x.parceiro === c.nome && noAno(x.vencimento) && x.categoria !== "Mídia"), (x) => x.valor);
+    const midia = db.midias.filter((m) => m.cliente === c.nome && noAno(m.competencia) && m.status !== "cancelado");
+    const comissao = sum(midia, (m) => midiaCalc(m).com);
+    const projetos = db.projetos.filter((p) => p.cliente === c.nome);
+    const custoProj = sum(projetos, (p) => projetoInfo(p).custo);
+    const influ = sum(db.influContratos.filter((k) => k.cliente === c.nome && k.status !== "cancelado" && noAno(k.vencimentoPagamento || k.dataPublicacao || TODAY)), (k) => k.valor);
+    const receita = rec + comissao;
+    const impostos = rec * (Number(cfg().aliquota) || 0) / 100;
+    const resultado = receita - impostos - custoProj - influ;
+    return { nome: c.nome, logoId: c.logoId, rec, comissao, receita, impostos, custoProj, influ, resultado, margem: receita ? resultado / receita : 0 };
+  }).filter((r) => r.receita || r.custoProj || r.influ).sort((a, b) => b.resultado - a.resultado);
+  const total = sum(rows, (r) => r.receita);
+  return `<div class="kpis">${kpi(`Receita de agência ${ano}`, BRL(total), `${rows.length} clientes`)}
+    ${kpi("Resultado dos clientes", BRL(sum(rows, (r) => r.resultado)), "antes de pessoal e despesas fixas", "pos")}
+    ${kpi("Maior cliente", rows.length ? escH([...rows].sort((a, b) => b.receita - a.receita)[0].nome) : "—", rows.length && total ? `${Math.round(([...rows].sort((a, b) => b.receita - a.receita)[0].receita / total) * 100)}% da receita (concentração)` : "")}</div>` +
+    `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${selAno()}</div>` +
+    table({ title: `Rentabilidade por cliente — ${ano}`, rows,
+      cols: [{ label: "Cliente", get: (r) => thumb(r.logoId, r.nome) }, { label: "Fees e projetos", num: true, get: money("rec") }, { label: "Comissão de mídia", num: true, get: money("comissao") },
+        { label: "Impostos (est.)", num: true, get: (r) => "−" + BRL(r.impostos) }, { label: "Custos de projetos", num: true, get: (r) => "−" + BRL(r.custoProj) }, { label: "Influenciadores", num: true, get: (r) => "−" + BRL(r.influ) },
+        { label: "Resultado", num: true, get: (r) => `<b class="${r.resultado >= 0 ? "pos" : "neg"}">${BRL(r.resultado)}</b>` }, { label: "Margem", num: true, get: (r) => `${Math.round(r.margem * 100)}%` },
+        { label: "Participação", num: true, get: (r) => (total ? `${Math.round((r.receita / total) * 100)}%` : "—") }] }) +
+    `<p class="empty">Receita de agência = fees e projetos faturados + comissão de mídia (a verba bruta de mídia é repassada e não conta). Custos de projetos vêm de Projetos e serviços (horas × custo/hora + terceiros); influenciadores, dos contratos do módulo Influenciadores.</p>`;
+}
+
 /* ----- Custos das APIs (tokens) ----- */
+function renderArmazenamento() {
+  const a = db.integracoes?.armazenamento;
+  if (!a) return "";
+  const banco = a.resumo.find((x) => x.onde === "banco") || { n: 0, bytes: 0 }, drive = a.resumo.find((x) => x.onde === "drive") || { n: 0, bytes: 0 };
+  const mover = reg(async () => {
+    try {
+      let r; do { toast("Movendo documentos para o Drive…"); r = await apiFetch("/api/arquivos/migrar", {}); } while (r.restantes && r.movidos);
+      toast(`Documentos no Drive. ${r.restantes ? "Ainda há arquivos; clique de novo." : "Concluído."}`); await loadData(); renderView();
+    } catch (e) { toast(e.message); }
+  });
+  const bkDrive = reg(async () => { try { const r = await apiFetch("/api/backup/drive", {}); toast(`Backup salvo no Drive: ${r.nome}`); await loadData(); renderView(); } catch (e) { toast(e.message); } });
+  return `<div class="panel"><div class="panel__head"><h3 class="panel__title">Arquivos e backup</h3>${db.integracoes.drive ? pill("Google Drive").replace("pill--", "pill--green ") : pill("guardando no banco")}</div>
+    <div class="kpis">${kpi("No Google Drive", drive.n, fmtBytes(drive.bytes))}${kpi("No banco de dados", banco.n, fmtBytes(banco.bytes) + " (logos e fotos ficam sempre aqui)", banco.bytes > 200 * 1048576 ? "neg" : "")}${kpi("Último backup automático", a.backup.ultimo ? new Date(a.backup.ultimo).toLocaleString("pt-BR") : "nenhum", a.backup.ultimo ? "pasta Backups do ERP no Drive" : "precisa do Drive configurado")}</div>
+    <p class="empty">Com o Drive configurado, documentos novos vão para "Arquivos do ERP/&lt;cadastro&gt;/&lt;nome&gt;" e o banco guarda só a referência. Todo dia às 8h sai um backup completo (JSON) para "Backups do ERP".</p>
+    <div class="dialog__actions" style="justify-content:flex-start">
+      <a class="btn-ghost" href="/api/backup" download>Baixar backup agora</a>
+      ${db.integracoes.drive ? `<button class="btn-ghost" data-act="${bkDrive}">Salvar backup no Drive</button>${banco.n ? `<button class="btn-primary" data-act="${mover}">Mover documentos do banco para o Drive</button>` : ""}` : ""}
+    </div></div>`;
+}
 function renderCustosApi() {
   const usd = Number(cfg().cotacaoDolar) || 5.5;
+  const limite = Number(cfg().limiteIaUsd) || 0;
   const rows = [...(db.consumo || [])].sort((a, b) => b.data.localeCompare(a.data));
   const mes = rows.filter((r) => r.data.slice(0, 7) === TODAY.slice(0, 7));
   const ia = rows.filter((r) => r.api.startsWith("Anthropic"));
@@ -1317,6 +1491,7 @@ function renderCustosApi() {
     ${kpi("Documentos analisados no mês", docsMes, docsMes ? `${real(custoMes / docsMes)} por documento` : "")}
     ${kpi("Tokens no mês", sum(mes, (r) => (r.entrada || 0) + (r.saida || 0)).toLocaleString("pt-BR"), `${sum(mes, (r) => r.entrada || 0).toLocaleString("pt-BR")} de entrada · ${sum(mes, (r) => r.saida || 0).toLocaleString("pt-BR")} de saída`)}
     ${kpi("Projeção do mês", real(custoMes / Math.max(1, Number(TODAY.slice(8, 10))) * 30), "no ritmo atual")}
+    ${kpi("Limite mensal de IA", limite ? `${Math.round((custoMes / limite) * 100)}%` : "sem limite", limite ? `US$ ${custoMes.toFixed(2)} de US$ ${limite.toFixed(2)} · ajuste em Configurações` : "defina um teto em Configurações", limite && custoMes >= limite * 0.8 ? "neg" : "")}
   </div>
   <div class="panel"><div class="panel__head"><h3 class="panel__title">APIs usadas e quanto custam</h3></div>
     <table class="table"><thead><tr><th>API</th><th>Para que serve</th><th>Como cobra</th><th class="num">Gasto no mês</th></tr></thead><tbody>
@@ -1347,7 +1522,9 @@ function renderConfig() {
     const iss = Number(document.getElementById("cfgIss").value) || 0;
     const lembretesAtivos = document.getElementById("cfgLembretes").checked;
     const cotacaoDolar = Number(document.getElementById("cfgDolar").value) || 5.5;
-    db.config = [{ ...c, regime, aliquota, encargos, servicoMunicipal, iss, lembretesAtivos, cotacaoDolar }];
+    const limiteIaUsd = Number(document.getElementById("cfgLimiteIa").value) || 0;
+    const alertasAtivos = document.getElementById("cfgAlertas").checked;
+    db.config = [{ ...c, regime, aliquota, encargos, servicoMunicipal, iss, lembretesAtivos, cotacaoDolar, limiteIaUsd, alertasAtivos }];
     log("Configuração", `${regime}: impostos ${aliquota}% · encargos ${encargos}%`); toast("Configurações salvas"); render();
   });
   const sugerir = reg(() => { const r = document.getElementById("cfgRegime").value; document.getElementById("cfgAliquota").value = REGIMES[r]; });
@@ -1359,6 +1536,8 @@ function renderConfig() {
       <label>Serviço municipal da NFS-e (como aparece na prefeitura)<input id="cfgServico" value="${escH(c.servicoMunicipal || "")}" placeholder="ex.: 17.06 - Propaganda e publicidade" /></label>
       <label>Alíquota de ISS (%)<input id="cfgIss" type="number" step="0.01" min="0" max="10" value="${c.iss ?? 5}" /></label>
       <label>Cotação do dólar (custos de APIs)<input id="cfgDolar" type="number" step="0.01" min="1" max="20" value="${c.cotacaoDolar ?? 5.5}" /></label>
+      <label>Limite mensal de gasto com IA (US$, 0 = sem limite)<input id="cfgLimiteIa" type="number" step="1" min="0" value="${c.limiteIaUsd ?? 0}" /></label>
+      <label class="check"><input id="cfgAlertas" type="checkbox" ${c.alertasAtivos ? "checked" : ""} /> Enviar alertas no Slack/WhatsApp (documentos novos, resumo diário de vencimentos e aprovações, limite de IA)</label>
       <label class="check"><input id="cfgLembretes" type="checkbox" ${c.lembretesAtivos ? "checked" : ""} /> Enviar lembretes de cobrança por e-mail aos clientes (3 dias antes e 1 dia após o vencimento)</label>
     </div>
     <p class="empty">Alíquotas sugeridas: Simples Nacional 11,33% (Anexo III, faixa inicial), Lucro Presumido 16,33% (PIS, COFINS, IRPJ, CSLL e ISS 5%), Lucro Real ~21,25%. Confirme com a contabilidade.</p>
@@ -1377,7 +1556,15 @@ function renderConfig() {
       <li>No <a href="https://admin.google.com" target="_blank" rel="noopener">Admin do Google Workspace</a>, em <b>Segurança → Controles de API → Delegação em todo o domínio</b>, adicione o ID do cliente da conta de serviço com os escopos <code>https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/drive</code>.</li>
       <li>No Drive de financeiro@, crie a pasta <b>Mantra ERP</b> e copie o ID dela (o final do link).</li>
       <li>Na Vercel, crie as variáveis <code>GOOGLE_SERVICE_ACCOUNT</code> (conteúdo do JSON), <code>DRIVE_PASTA_RAIZ</code> (ID da pasta), <code>ANTHROPIC_API_KEY</code> e <code>CRON_SECRET</code> (uma senha qualquer), e faça um novo deploy.</li>
-    </ol></div>`;
+    </ol></div>
+  ${renderArmazenamento()}
+  <div class="panel"><div class="panel__head"><h3 class="panel__title">Alertas no Slack e WhatsApp</h3>${(() => { const a = db.integracoes?.alertas || {}; return a.slack || a.whatsapp ? pill([a.slack && "Slack", a.whatsapp && "WhatsApp"].filter(Boolean).join(" + ")).replace("pill--", "pill--green ") : pill("não configurado"); })()}</div>
+    <ol class="steps">
+      <li><b>Slack:</b> em <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a>, crie um app → <b>Incoming Webhooks</b> → escolha o canal (ex.: #financeiro) e copie a URL para a variável <code>SLACK_WEBHOOK_URL</code> na Vercel.</li>
+      <li><b>WhatsApp:</b> na <a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business</a>, ative a API do WhatsApp Cloud e crie <code>WHATSAPP_TOKEN</code>, <code>WHATSAPP_PHONE_ID</code> e <code>WHATSAPP_PARA</code> (números com DDI, separados por vírgula). Para mensagens fora da janela de 24 h, aprove um modelo com uma variável e informe o nome em <code>WHATSAPP_TEMPLATE</code>.</li>
+      <li>Marque "Enviar alertas" acima e salve. O resumo diário sai junto com a rotina das 8h.</li>
+    </ol>
+    <div class="dialog__actions" style="justify-content:flex-start"><button class="btn-ghost" data-act="${reg(async () => { try { await apiFetch("/api/alertas/teste", {}); toast("Alerta de teste enviado"); } catch (e) { toast(e.message); } })}">Enviar alerta de teste</button></div></div>`;
 }
 
 const SUBTITULOS = {
@@ -1389,7 +1576,7 @@ const SUBTITULOS = {
   contratos: "Vigências, reajustes, parcelas e cobranças recorrentes automáticas.",
   servicos: "Orçamento, horas, custos e rentabilidade por projeto e por cliente.",
   pessoas: "Colaboradores, remuneração, benefícios e documentos.",
-  relatorios: "Receita, despesas, inadimplência e resultado por área e por cliente.",
+  relatorios: "DRE, orçado × realizado, rentabilidade por cliente, receita e inadimplência.",
   aprovacoes: "Aprovações, usuários, permissões, configurações, custos de APIs e histórico de alterações.",
   emails: "Notas fiscais, boletos e contratos que chegam por e-mail, lidos e organizados automaticamente.",
   influenciadores: "Cadastro de influenciadores, contratos por campanha, NFs e pagamentos.",
@@ -1509,6 +1696,8 @@ erpEl.addEventListener("click", (e) => {
   actionRegistry.get(b.dataset.act)?.();
 });
 erpEl.addEventListener("change", (e) => {
+  if (e.target.matches("[data-anorel]")) { anoRel = Number(e.target.value); return render(); }
+  if (e.target.matches("[data-mesorc]") && e.target.value) { mesOrc = e.target.value; return render(); }
   if (e.target.dataset.emailf) { filtroEmail[e.target.dataset.emailf] = e.target.value; return render(); }
   if (e.target.id === "extratoFile" && e.target.files[0]) importarExtrato(e.target.files[0]).catch((err) => toast(err.message));
 });

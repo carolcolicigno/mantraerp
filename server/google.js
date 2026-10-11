@@ -124,6 +124,13 @@ async function subirArquivo(usuario, pastaId, nome, tipo, conteudo) {
     method: "POST", headers: { "Content-Type": `multipart/related; boundary=${limite}` }, body: corpo,
   });
 }
+async function baixarArquivo(usuario, id) {
+  const r = await fetch(`${DRIVE}/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${await token(usuario, "drive")}` } });
+  if (!r.ok) throw new GoogleError(`Google Drive: erro ${r.status} ao baixar o arquivo`);
+  return Buffer.from(await r.arrayBuffer());
+}
+// Manda para a lixeira (recuperável por 30 dias), em vez de apagar de vez.
+const lixeira = (usuario, id) => call(usuario, "drive", `${DRIVE}/${encodeURIComponent(id)}?supportsAllDrives=true`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) });
 const linkPasta = (id) => `https://drive.google.com/drive/folders/${id}`;
 
-module.exports = { configurado, GoogleError, listarMensagens, lerMensagem, baixarAnexo, enviarEmail, caminho, subirArquivo, linkPasta };
+module.exports = { configurado, GoogleError, listarMensagens, lerMensagem, baixarAnexo, enviarEmail, caminho, subirArquivo, baixarArquivo, lixeira, linkPasta };

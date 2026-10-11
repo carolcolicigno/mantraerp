@@ -45,6 +45,18 @@ async function sincronizar(ctx, { limite = 12 } = {}) {
   const cad = { fornecedores: await store.all("fornecedores"), clientes: await store.all("clientes"), influenciadores: await store.all("influenciadores") };
   const novos = [], erros = [];
   let restante = limite;
+  // Limite mensal de gasto com IA (Configurações). Ao atingir, para de classificar e avisa uma vez no mês.
+  const cfg = (await store.get("config", "geral")) || {};
+  const mes = new Date().toISOString().slice(0, 7);
+  const gastoMes = (await store.all("consumo")).filter((c) => c.data.slice(0, 7) === mes).reduce((s, c) => s + (Number(c.custoUsd) || 0), 0);
+  const limiteUsd = Number(cfg.limiteIaUsd) || 0;
+  if (limiteUsd && gastoMes >= limiteUsd) {
+    const st = (await store.get("config", "inbox-status")) || { id: "inbox-status" };
+    const msg = `Limite mensal de IA atingido (US$ ${gastoMes.toFixed(2)} de US$ ${limiteUsd.toFixed(2)}). A leitura automática foi pausada até o próximo mês ou até o limite ser aumentado em Configurações.`;
+    if (st.alertaLimite !== mes) { await ctx.alerta?.(`🚫 ${msg}`); await ctx.log("Limite de IA atingido", msg); }
+    await store.put("config", "inbox-status", { ...st, ultimaSync: new Date().toISOString(), erros: [msg], alertaLimite: mes });
+    return { novos, erros: [msg], pendentes: false, limiteAtingido: true };
+  }
   for (const caixa of CAIXAS()) {
     if (restante <= 0) break;
     const area = areaDaCaixa(caixa);
@@ -64,7 +76,12 @@ async function sincronizar(ctx, { limite = 12 } = {}) {
     }
     if (completo) await store.put("config", estado.id, { ...estado, ultima: inicio });
   }
-  await store.put("config", "inbox-status", { id: "inbox-status", ultimaSync: new Date().toISOString(), erros: erros.slice(0, 5) });
+  const anterior = (await store.get("config", "inbox-status")) || {};
+  await store.put("config", "inbox-status", { ...anterior, id: "inbox-status", ultimaSync: new Date().toISOString(), erros: erros.slice(0, 5) });
+  if (novos.length && ctx.alerta) {
+    const BRLx = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    await ctx.alerta([`📥 ${novos.length} documento(s) novo(s) por e-mail:`, ...novos.slice(0, 8).map((e) => `   • ${NOME_TIPO[e.tipo] || e.tipo} — ${e.entidade?.nome || e.emitente || e.de}${e.valor ? ` — ${BRLx(e.valor)}` : ""}${e.vencimento ? ` (vence ${e.vencimento.split("-").reverse().join("/")})` : ""}`)].join("\n"));
+  }
   return { novos, erros, pendentes: restante < 0 };
 }
 
@@ -105,10 +122,11 @@ async function processar(ctx, caixa, area, mid, cad) {
   }
   for (const a of anexos) {
     const anexo = { nome: a.nome.slice(0, 150), tipo: a.tipo };
-    if (pastaId) { try { anexo.drive = (await google.subirArquivo(usuarioDrive, pastaId, a.nome, a.tipo, a.conteudo)).webViewLink; } catch (e) { anexo.erroDrive = e.message; } }
-    if (a.conteudo.length <= MAX_ANEXO) {
-      // Guarda no ERP: no cadastro identificado ou, se não houver, só na caixa de e-mails.
-      const arq = { id: crypto.randomBytes(12).toString("hex"), col: dono?.col || "emails", dono: dono?.id || item.id, categoria: "documento", nome: anexo.nome, tipo: a.tipo === "application/xml" ? "text/plain" : a.tipo, tamanho: a.conteudo.length, dados: a.conteudo.toString("base64"), criado_por: `E-mail ${caixa}`, criado_em: new Date().toISOString(), tipo_doc: TIPO_DOC[d.tipo] || "Outros" };
+    let driveId = null;
+    if (pastaId) { try { const f = await google.subirArquivo(usuarioDrive, pastaId, a.nome, a.tipo, a.conteudo); anexo.drive = f.webViewLink; driveId = f.id; } catch (e) { anexo.erroDrive = e.message; } }
+    if (driveId || a.conteudo.length <= MAX_ANEXO) {
+      // Aparece no ERP no cadastro identificado (ou só na caixa de e-mails). Se já foi para o Drive, o banco guarda só a referência.
+      const arq = { id: crypto.randomBytes(12).toString("hex"), col: dono?.col || "emails", dono: dono?.id || item.id, categoria: "documento", nome: anexo.nome, tipo: a.tipo === "application/xml" ? "text/plain" : a.tipo, tamanho: a.conteudo.length, dados: driveId ? "" : a.conteudo.toString("base64"), drive_id: driveId, criado_por: `E-mail ${caixa}`, criado_em: new Date().toISOString(), tipo_doc: TIPO_DOC[d.tipo] || "Outros" };
       await store.arqPut(arq);
       anexo.arqId = arq.id;
     }

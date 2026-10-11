@@ -371,3 +371,7 @@ input[type=checkbox] { accent-color: var(--accent); }
 .rail__badge { position: absolute; top: 0; right: -2px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: #e5484d; color: #fff; font: 600 10px/17px "DM Sans", sans-serif; text-align: center; }
 label.check { flex-direction: row; align-items: center; gap: 8px; grid-column: 1 / -1; display: flex; }
 .panel, .kpis { flex-shrink: 0; }
+.erp__body { grid-auto-rows: max-content; }
+.table--dre td, .table--dre th { white-space: nowrap; font-size: 12.5px; }
+.table--dre td:first-child { white-space: normal; min-width: 240px; }
+.dre-total td { font-weight: 700; background: var(--lav); }

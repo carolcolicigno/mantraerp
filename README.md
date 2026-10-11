@@ -90,3 +90,11 @@ Faça backup do arquivo do banco (`/data/mantra.db`) regularmente.
 Lê `financeiro@` e `influenciadores@`, classifica anexos com o Claude, salva no Drive (`Financeiro|Influenciadores / Fornecedores|Clientes|Influenciadores / <nome> / <tipo> / <AAAA-MM>`), anexa ao cadastro e mostra na **Caixa de e-mails**. A leitura roda ao abrir o ERP (no máximo a cada 10 min), pelo botão "Ler e-mails agora" e pelo cron diário da Vercel, que também envia os lembretes de cobrança (liga/desliga em Configurações). O consumo de tokens fica em **Aprovações e configurações → Custos de APIs**.
 
 Variáveis: `GOOGLE_SERVICE_ACCOUNT` (JSON da conta de serviço com delegação em todo o domínio), `DRIVE_PASTA_RAIZ`, `ANTHROPIC_API_KEY`, `CRON_SECRET`; opcionais `CAIXAS_EMAIL`, `DRIVE_USUARIO`, `EMAIL_REMETENTE`.
+
+## Arquivos, backup, alertas e relatórios
+
+- **Arquivos:** com o Drive configurado, documentos vão para `Arquivos do ERP/<cadastro>/<nome>` e o banco guarda só a referência (logos e fotos continuam no banco). Em Configurações há o botão para mover os documentos antigos.
+- **Backup:** diário às 8h para `Backups do ERP` no Drive, e download manual em Configurações (administradores).
+- **Alertas:** Slack (`SLACK_WEBHOOK_URL`) e/ou WhatsApp Cloud API (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_PARA`, opcional `WHATSAPP_TEMPLATE`). Liga/desliga em Configurações.
+- **Limite de IA:** teto mensal em US$ em Configurações; ao atingir, a leitura automática pausa e avisa.
+- **Relatórios:** DRE gerencial, orçado × realizado, rentabilidade por cliente. **Mídia e repasses** fica em Financeiro.

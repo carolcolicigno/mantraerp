@@ -9,6 +9,8 @@ const { openStore } = require("./db");
 const asaas = require("./asaas");
 const automacao = require("./emails");
 const ia = require("./ia");
+const armazenamento = require("./armazenamento");
+const alertas = require("./alertas");
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC = path.join(__dirname, "..", "public");
@@ -40,6 +42,8 @@ const WRITE = {
   influContratos: ["influenciadores"],
   emails: ["emails"], // só status/vínculos; os itens são criados pela automação
   consumo: [], // gravado só pelo servidor
+  midias: ["financeiro"],
+  orcamentos: ["financeiro"],
   usuarios: [], // só admin
   config: [], // só admin
 };
@@ -134,7 +138,8 @@ async function dadosPara(u) {
   out.emails = out.emails.filter((e) => e.status !== "ignorado" && veCaixa(e)).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 500);
   out.consumo = isAdmin(u) || hasModule(u, "financeiro") ? out.consumo : [];
   const inbox = (await getRec("config", "inbox-status")) || {};
-  out.integracoes = { asaas: asaas.configurado(), ambiente: asaas.ambiente(), emails: { ...automacao.status(), ultimaSync: inbox.ultimaSync || "", erros: inbox.erros || [] }, modeloIa: ia.MODELO, precoIa: ia.PRECO };
+  out.integracoes = { asaas: asaas.configurado(), ambiente: asaas.ambiente(), emails: { ...automacao.status(), ultimaSync: inbox.ultimaSync || "", erros: inbox.erros || [] }, modeloIa: ia.MODELO, precoIa: ia.PRECO, alertas: alertas.canais(), drive: armazenamento.noDrive() };
+  if (isAdmin(u)) out.integracoes.armazenamento = { resumo: await store.arqResumo(), backup: (await getRec("config", "backup-status")) || {} };
   return out;
 }
 
@@ -187,11 +192,10 @@ async function enviarArquivo(u, body) {
   if (tamanho > ARQ_MAX) throw new HttpError(413, "Arquivo maior que 3 MB");
   const rec = await getRec(col, String(dono || ""));
   if (!rec) throw new HttpError(404, "Salve o cadastro antes de anexar arquivos");
-  const a = { id: crypto.randomBytes(12).toString("hex"), col, dono: rec.id, categoria, nome: String(nome || "arquivo").replace(/[\\/\r\n"]/g, "_").slice(0, 150), tipo, tamanho, dados, criado_por: u.nome, criado_em: new Date().toISOString(), tipo_doc: tipoDoc };
-  await store.arqPut(a);
+  const a = { id: crypto.randomBytes(12).toString("hex"), col, dono: rec.id, categoria, nome: String(nome || "arquivo").replace(/[\\/\r\n"]/g, "_").slice(0, 150), tipo, tamanho, criado_por: u.nome, criado_em: new Date().toISOString(), tipo_doc: tipoDoc };
+  await armazenamento.guardar(store, a, Buffer.from(dados, "base64"), labelOf(rec));
   if (categoria === "documento") await log(u.nome, "Documento anexado", `${col}: ${labelOf(rec)} — ${a.nome}`);
-  const { dados: _, ...meta } = a;
-  return meta;
+  return a;
 }
 
 /* ---------- Cobranças recorrentes de contratos ---------- */
@@ -321,7 +325,11 @@ async function webhookAsaas(req, res) {
 }
 
 /* ---------- Automação de e-mails ---------- */
-const ctxAutomacao = { store, log: (acao, detalhe) => log("Automação", acao, detalhe) };
+const alertasLigados = async () => !!((await getRec("config", "geral")) || {}).alertasAtivos;
+const ctxAutomacao = {
+  store, log: (acao, detalhe) => log("Automação", acao, detalhe),
+  alerta: async (texto) => { if (await alertasLigados()) await alertas.enviar(texto); },
+};
 let sincronizando = null;
 const rodarSync = () => (sincronizando ||= automacao.sincronizar(ctxAutomacao).finally(() => { sincronizando = null; }));
 async function sincronizarEmails(u, body) {
@@ -348,6 +356,10 @@ async function cronEmails(req, res) {
   const out = {};
   if (st.google && st.ia) { const r = await rodarSync().catch((e) => ({ erros: [e.message], novos: [] })); out.novos = r.novos.length; out.erros = r.erros; }
   out.lembretes = await automacao.enviarLembretes(ctxAutomacao).catch((e) => ({ erro: e.message }));
+  out.backup = await armazenamento.backupNoDrive(store).catch((e) => ({ ok: false, motivo: e.message }));
+  if (!out.backup.ok && out.backup.motivo !== "Drive não configurado") await ctxAutomacao.alerta(`⚠️ Backup diário do ERP falhou: ${out.backup.motivo}`);
+  if (await alertasLigados()) { const r = await alertas.resumoDiario(store); if (r) out.resumo = await alertas.enviar(r); }
+  await store.put("config", "backup-status", { id: "backup-status", ultimo: out.backup.ok ? new Date().toISOString() : ((await getRec("config", "backup-status"))?.ultimo || ""), ...out.backup });
   return send(res, 200, out);
 }
 
@@ -434,6 +446,8 @@ async function aplicarLote(u, { changes = [], acao, detalhe }) {
           iss: Math.min(10, Math.max(0, Number(data.iss) || 0)),
           lembretesAtivos: !!data.lembretesAtivos,
           cotacaoDolar: Math.min(20, Math.max(1, Number(data.cotacaoDolar) || 5.5)),
+          limiteIaUsd: Math.min(10000, Math.max(0, Number(data.limiteIaUsd) || 0)),
+          alertasAtivos: !!data.alertasAtivos,
         });
       }
       await s.put(col, id, data);
@@ -545,18 +559,46 @@ async function api(req, res, url) {
       "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
       "Content-Disposition": `${imagem || a.tipo === "application/pdf" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(a.nome)}`,
     });
-    return res.end(Buffer.from(a.dados, "base64"));
+    let conteudo;
+    try { conteudo = await armazenamento.ler(a); } catch (e) { throw new HttpError(502, `Não foi possível buscar o arquivo no Drive: ${e.message}`); }
+    return res.end(conteudo);
   }
   if (req.method === "POST" && (m = url.pathname.match(/^\/api\/arquivos\/([a-f0-9]{24})\/excluir$/))) {
     const a = await store.arqMeta(m[1]);
     if (!a || !canWrite(u, a.col)) throw new HttpError(404, "Arquivo não encontrado");
-    await store.arqDel(a.id);
+    await armazenamento.apagar(store, a);
     if (a.categoria === "documento") await log(u.nome, "Documento removido", `${a.col}: ${a.nome}`);
     return send(res, 200, { ok: true });
   }
   if (route === "POST /api/integracoes/cobranca" || route === "POST /api/integracoes/nfse" || route === "POST /api/integracoes/sincronizar")
     return send(res, 200, await integracao(u, route.split("/").pop(), await readBody(req)));
   if (route === "POST /api/emails/sincronizar") return send(res, 200, await sincronizarEmails(u, await readBody(req)));
+  if (route === "GET /api/backup") {
+    if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");
+    await log(u.nome, "Backup baixado", "Cópia completa dos dados");
+    return send(res, 200, await armazenamento.gerarBackup(store), { "Content-Disposition": `attachment; filename="mantra-erp-${new Date().toISOString().slice(0, 10)}.json"` });
+  }
+  if (route === "POST /api/backup/drive") {
+    if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");
+    const r = await armazenamento.backupNoDrive(store).catch((e) => { throw new HttpError(502, e.message); });
+    if (!r.ok) throw new HttpError(400, "Configure o Google Drive para salvar backups lá");
+    await store.put("config", "backup-status", { id: "backup-status", ultimo: new Date().toISOString(), ...r });
+    return send(res, 200, r);
+  }
+  if (route === "POST /api/arquivos/migrar") {
+    if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");
+    const nomeDono = async (col, id) => labelOf(await getRec(col, id));
+    try { const r = await armazenamento.migrar(store, nomeDono); if (r.movidos) await log(u.nome, "Arquivos movidos para o Drive", `${r.movidos} documentos`); return send(res, 200, { ...r, resumo: await store.arqResumo() }); }
+    catch (e) { throw new HttpError(e instanceof HttpError ? e.status : 502, e.message); }
+  }
+  if (route === "POST /api/alertas/teste") {
+    if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");
+    const c = alertas.canais();
+    if (!c.slack && !c.whatsapp) throw new HttpError(400, "Nenhum canal configurado (SLACK_WEBHOOK_URL ou WHATSAPP_*)");
+    const r = await alertas.enviar((await alertas.resumoDiario(store)) || "✅ Teste de alerta do Mantra ERP: tudo em dia por aqui.");
+    if (!r.enviado) throw new HttpError(502, r.erros.join(" · "));
+    return send(res, 200, { ok: true, erros: r.erros });
+  }
   if (route === "POST /api/reset") {
     if (!isAdmin(u)) throw new HttpError(403, "Somente administradores");
     await store.tx(seedNegocio);
